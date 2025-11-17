@@ -400,8 +400,8 @@ function verifyLiveness(face, gestures, faceBox) {
       // 记录最大偏差
       if (dev > maxYawDeviation) maxYawDeviation = dev
       
-      // 判断是否完成摇头：最大偏差 >= 8°，当前偏差 < 5°，且速度较慢 (<= 3°/帧)
-      if (maxYawDeviation >= 8 && dev < 5 && Math.abs(ang - lastYaw) <= 3) {
+      // 判断是否完成摇头：最大偏差 >= 5°，当前偏差 < 5°，且速度较慢 (<= 3°/帧)
+      if (maxYawDeviation >= 5 && dev < 5 && Math.abs(ang - lastYaw) <= 3) {
         detected = true
       }
     }

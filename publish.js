@@ -188,20 +188,6 @@ async function publishViaSFTP() {
       }
     }
 
-    // 清理 assets 目录中的旧文件
-    log(`\n⏳ 清理旧版本的 assets 目录...`, 'blue');
-    const remoteAssetsPath = path.join(REMOTE_PATH, 'assets').replace(/\\/g, '/');
-    try {
-      await removeRemoteDir(sftp, remoteAssetsPath);
-      log(`✓ 清理 assets 目录 完成`, 'green');
-    } catch (error) {
-      if (error.code === 2) {
-        log(`✓ assets 目录不存在，无需清理`, 'green');
-      } else {
-        log(`⚠️  清理 assets 目录失败: ${error.message}`, 'yellow');
-      }
-    }
-
     // 获取本地和远程文件列表
     log(`\n⏳ 扫描本地文件...`, 'blue');
     const localFiles = getAllFiles(LOCAL_DIST);
@@ -210,6 +196,15 @@ async function publishViaSFTP() {
     log(`\n⏳ 扫描远程文件...`, 'blue');
     const remoteFiles = await getRemoteFiles(sftp, REMOTE_PATH);
     log(`✓ 扫描远程文件 完成 (${remoteFiles.length} 个文件)`, 'green');
+
+    // 分类处理 assets 目录文件
+    const localAssetsFiles = localFiles.filter(f => f.remote.startsWith('assets/'));
+    const remoteAssetsFiles = remoteFiles.filter(f => f.startsWith('assets/'));
+    const localAssetSet = new Set(localAssetsFiles.map(f => f.remote));
+    const remoteAssetSet = new Set(remoteAssetsFiles);
+    
+    // 需要删除的 assets 文件：在远程存在但本地不存在
+    const assetsToDelete = Array.from(remoteAssetSet).filter(f => !localAssetSet.has(f));
 
     // 上传本地文件
     log(`\n⏳ 上传文件...`, 'blue');
@@ -220,6 +215,12 @@ async function publishViaSFTP() {
       const remoteDir = path.dirname(remoteFilePath).replace(/\\/g, '/');
 
       try {
+        // assets 目录中的同名文件不再上传（保持现有版本）
+        if (file.remote.startsWith('assets/') && remoteAssetSet.has(file.remote)) {
+          log(`  ⊘ ${file.remote} (已存在，跳过上传)`, 'yellow');
+          continue;
+        }
+
         // 确保远程目录存在
         await sftp.mkdir(remoteDir, true);
         
@@ -234,12 +235,18 @@ async function publishViaSFTP() {
     }
     log(`✓ 上传文件 完成 (${uploadCount} 个文件)`, 'green');
 
-    // 删除远程不存在的文件
+    // 删除远程不存在的文件（包括 assets 中本地没有的）
     log(`\n⏳ 清理远程不存在的文件...`, 'blue');
     let deleteCount = 0;
     const localFileSet = new Set(localFiles.map(f => f.remote));
 
     for (const remoteFile of remoteFiles) {
+      // 跳过 assets 中需要保留的文件
+      if (remoteFile.startsWith('assets/') && remoteAssetSet.has(remoteFile) && localAssetSet.has(remoteFile)) {
+        continue;
+      }
+      
+      // 删除不在本地的文件
       if (!localFileSet.has(remoteFile)) {
         try {
           const remoteFilePath = path.join(REMOTE_PATH, remoteFile).replace(/\\/g, '/');
