@@ -1,6 +1,6 @@
 {
   "name": "js-face-detector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vue 3 face detector component using human.js",
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "publish": "node publish.js",
-    "publish:build": "npm run build && npm run publish"
+    "publish:build": "yarn run build && yarn run publish",
+    "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@vladmandic/human": "^3.3.0",
@@ -16,7 +17,12 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/test-utils": "^2.4.0",
+    "@vue/tsconfig": "^0.5.0",
     "ssh2-sftp-client": "^12.0.1",
-    "vite": "^5.0.0"
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vue-tsc": "^1.8.0"
   }
 }

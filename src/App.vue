@@ -24,20 +24,24 @@
     <!-- 页面内容 -->
     <div class="page-content">
       <!-- 人脸采集页面 -->
-      <FaceCollector v-if="currentPage === 'collector'" />
+      <FaceCollectorDemo v-if="currentPage === 'collector'" />
       <!-- 活体验证页面 -->
-      <FaceAliveChecker v-if="currentPage === 'liveness'" />
+      <FaceAliveCheckerDemo v-if="currentPage === 'liveness'" />
+      <!-- 静默活体检测页面 -->
+      <SilentLivenessDemo v-if="currentPage === 'silent_liveness'" />
     </div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import FaceCollector from './pages/FaceCollector.vue'
-import FaceAliveChecker from './pages/FaceAliveChecker.vue'
+import FaceCollectorDemo from './pages/FaceCollectorDemo.vue'
+import FaceAliveCheckerDemo from './pages/FaceAliveCheckerDemo.vue'
+import SilentLivenessDemo from './pages/SilentLivenessDemo.vue'
 
 // 当前活动页面
-const currentPage = ref('collector')
+const currentPage = ref<string>('collector')
+
 // Prevent pinch zoom on mobile
 onMounted(() => {
   // Prevent zoom on double tap
