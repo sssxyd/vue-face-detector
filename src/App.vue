@@ -26,6 +26,12 @@
           静默活体
         </button>
       </div>
+      <a href="https://github.com/sssxyd/js-face-detector" target="_blank" rel="noopener noreferrer" class="github-star-btn" title="Star this project on GitHub">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
+          <path d="M8 .25a.75.75 0 00-.75.75v5.69L2.28 2.28a.75.75 0 00-1.06 1.06L6.19 8l-4.97 4.97a.75.75 0 101.06 1.06l5.44-5.44V15a.75.75 0 001.5 0V.75A.75.75 0 008 .25z"/>
+        </svg>
+        <span>Star</span>
+      </a>
     </div>
 
     <!-- 页面内容 -->
@@ -134,6 +140,40 @@ html, body {
   border-color: #42b983;
 }
 
+/* GitHub Star按钮样式 */
+.github-star-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background-color: #f0f0f0;
+  color: #333;
+  border: 2px solid #ddd;
+  border-radius: 5px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.github-star-btn:hover {
+  background-color: #ffd700;
+  border-color: #ffb700;
+  color: #333;
+  transform: scale(1.05);
+}
+
+.github-star-btn:active {
+  transform: scale(0.98);
+}
+
+.github-icon {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 /* 页面内容区域 */
 .page-content {
   flex: 1;
@@ -166,6 +206,11 @@ html, body {
     padding: 10px 12px;
     font-size: 13px;
   }
+
+  .github-star-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
   
   .page-content {
     padding: 15px;
@@ -184,6 +229,11 @@ html, body {
   
   .nav-btn {
     padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .github-star-btn {
+    padding: 6px 10px;
     font-size: 12px;
   }
   

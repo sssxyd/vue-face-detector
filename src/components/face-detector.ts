@@ -54,7 +54,9 @@ export const BORDER_COLOR_STATES = Object.freeze({
   MULTIPLE_FACES: '#f56c6c',  // 检测到多个人脸：红色
   PERFECT: '#42b983',    // 条件都满足：绿色
   PARTIAL: '#ffc107',    // 条件部分满足：黄色
-  INVALID: '#ff9800'     // 条件都不满足：橙色
+  INVALID: '#ff9800',    // 条件都不满足：橙色
+  SUCCESS: '#42b983',    // 成功：绿色
+  ERROR: '#f5222d'       // 错误：红色
 })
 
 /**
