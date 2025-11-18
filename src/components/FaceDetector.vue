@@ -294,7 +294,7 @@ function stopDetection(success: boolean = false): void {
   if (actionTimeoutId) clearTimeout(actionTimeoutId)
   if (stream) stream.getTracks().forEach(t => t.stop())
 
-  let resultImageBase64 = (success && baselineFaceData) ? baselineFaceData : captureFaceFrame([0, 0, videoWidth.value, videoHeight.value])
+  let resultImageBase64 = (success && baselineFaceData) ? baselineFaceData : captureFrame()
   
   if (resultImageBase64) {
     // 绘制检测结果或最后一帧图片
@@ -720,48 +720,49 @@ function displayResultImage(resultImageBase64: string): void {
       // 清空画布
       ctx.clearRect(0, 0, canvasWidth, canvasHeight)
       
-      // 计算圆形内切区域的中心和半径
-      const centerX = canvasWidth / 2
-      const centerY = canvasHeight / 2
-      const radius = Math.min(canvasWidth, canvasHeight) / 2
-      
-      // 保存当前状态
-      ctx.save()
-      
-      // 创建圆形裁剪区域
-      ctx.beginPath()
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-      ctx.clip()
-      
-      // 获取图片的中心最大正方形的内切圆
       // 图片宽高
       const imgWidth = img.width
       const imgHeight = img.height
       
-      // 计算图片中心最大正方形的边长（取较小的维度）
+      // 获取图片的中心最大正方形区域
+      // 正方形边长 = min(图片宽, 图片高)
       const squareSize = Math.min(imgWidth, imgHeight)
       
-      // 最大正方形的内切圆半径
-      const squareRadius = squareSize / 2
+      // 正方形在原图中的起始位置（居中）
+      const sourceX = (imgWidth - squareSize) / 2
+      const sourceY = (imgHeight - squareSize) / 2
       
-      // 将图片缩放到画布大小并显示中心最大正方形的内切圆
-      // 计算缩放比例（使正方形的内切圆填充画布的圆形）
-      const scale = radius / squareRadius
+      // 计算缩放比例：使正方形填充画布
+      const scale = Math.min(canvasWidth, canvasHeight) / squareSize
       
-      // 计算绘制位置
-      const drawX = (canvasWidth - imgWidth * scale) / 2
-      const drawY = (canvasHeight - imgHeight * scale) / 2
+      // 缩放后的尺寸
+      const scaledSize = squareSize * scale
       
-      // 绘制图片到结果画布
-      ctx.drawImage(img, drawX, drawY, imgWidth * scale, imgHeight * scale)
+      // 在画布中央绘制
+      const drawX = (canvasWidth - scaledSize) / 2
+      const drawY = (canvasHeight - scaledSize) / 2
       
-      // 恢复状态
-      ctx.restore()
+      // 从图片的中心最大正方形区域裁切并绘制
+      // drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, destX, destY, destWidth, destHeight)
+      ctx.drawImage(
+        img,
+        sourceX, sourceY, squareSize, squareSize,    // 源区域：中心最大正方形
+        drawX, drawY, scaledSize, scaledSize          // 目标区域：居中缩放到画布
+      )
       
       // 标记为显示结果状态
       isShowingResult.value = true
       
-      console.log('[FaceDetector] Captured face image displayed on result canvas (circular, center max square inscribed circle)')
+      console.log('[FaceDetector] Captured face image displayed on result canvas (center max square, CSS circle clipping)', {
+        imgWidth,
+        imgHeight,
+        squareSize,
+        scale,
+        scaledSize,
+        canvasWidth,
+        canvasHeight,
+        aspectRatio: `${imgWidth}:${imgHeight}`
+      })
     }
     
     img.onerror = () => {
