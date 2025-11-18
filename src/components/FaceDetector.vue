@@ -13,13 +13,12 @@
         :height="videoHeight"
         class="detection-canvas"
       ></canvas>
-      <!-- 结果画布：用于显示结果图片 -->
-      <canvas 
-        ref="resultCanvasRef" 
-        :width="videoWidth" 
-        :height="videoHeight"
-        class="result-canvas"
-      ></canvas>      
+      <!-- 结果图片：用于显示结果图片 -->
+      <img 
+        ref="resultImageRef" 
+        :src="resultImageSrc"
+        class="result-image"
+      />      
       <!-- 活体检测提示文本 -->
       <div v-if="actionPromptText && props.showActionPrompt" class="action-prompt">
         {{ actionPromptText }}
@@ -68,8 +67,10 @@ const emit = defineEmits<{
 const videoRef: Ref<HTMLVideoElement | null> = ref(null)
 // 画布元素引用，用于绘制检测框
 const canvasRef: Ref<HTMLCanvasElement | null> = ref(null)
-// 结果画布元素引用，用于显示采集的图片或最后一帧
-const resultCanvasRef: Ref<HTMLCanvasElement | null> = ref(null)
+// 结果图片元素引用，用于显示采集的图片或最后一帧
+const resultImageRef: Ref<HTMLImageElement | null> = ref(null)
+// 结果图片数据
+const resultImageSrc: Ref<string> = ref('')
 // 是否为移动设备
 const isMobileDevice: Ref<boolean> = ref(false)
 // 是否为竖屏方向
@@ -79,8 +80,6 @@ const isDetecting: Ref<boolean> = ref(false)
 
 // 视频画布上下文
 let canvasCtx: CanvasRenderingContext2D | null = null
-// 结果画布上下文
-let resultCanvasCtx: CanvasRenderingContext2D | null = null
 
 // 缓存的临时 canvas 对象（用于画面捕获）
 let captureCanvas: HTMLCanvasElement | null = null
@@ -114,9 +113,6 @@ interface DetectionState {
   completedActions: Set<LivenessAction>
   currentAction: LivenessAction | null
   
-  // === 点头检测 ===
-  nodSequence: ('up' | 'down')[]
-  
   // === 图片采集 ===
   baselineImage: string | null
   capturedImage: string | null
@@ -128,7 +124,6 @@ const detectionState = reactive<DetectionState>({
   isSilentLivenessStarted: false,
   completedActions: new Set(),
   currentAction: null,
-  nodSequence: [],
   baselineImage: null,
   capturedImage: null
 })
@@ -223,7 +218,6 @@ onMounted(async () => {
 
   // 预先获取上下文
   canvasCtx = canvasRef.value?.getContext('2d') || null
-  resultCanvasCtx = resultCanvasRef.value?.getContext('2d') || null
 })
 
 // 组件卸载时清理资源
@@ -273,12 +267,10 @@ function handleOrientationChange(): void {
     if (stream) stream.getTracks().forEach(t => t.stop())
     // 重新初始化上下文
     canvasCtx = null
-    resultCanvasCtx = null
     detectDevice()
     // 延迟重启，确保 DOM 更新完成
     setTimeout(() => {
       canvasCtx = canvasRef.value?.getContext('2d') || null
-      resultCanvasCtx = resultCanvasRef.value?.getContext('2d') || null
       startDetection()
     }, 500)
   }
@@ -297,7 +289,6 @@ function resetDetectionState(): void {
   
   // 重置活体检测相关状态
   detectionState.completedActions.clear()
-  detectionState.nodSequence = []
   detectionState.baselineImage = null
   detectionState.capturedImage = null
   detectionState.currentAction = null
@@ -306,17 +297,13 @@ function resetDetectionState(): void {
   // 清空所有定时器
   if (actionTimeoutId) clearTimeout(actionTimeoutId)
   
-  // 清空两个 canvas
-
   // 清空检测画布
   if (canvasCtx) {
     canvasCtx.clearRect(0, 0, canvasRef.value!.width, canvasRef.value!.height)
   }
 
-  // 清空结果画布
-  if (resultCanvasCtx) {
-    resultCanvasCtx.clearRect(0, 0, resultCanvasRef.value!.width, resultCanvasRef.value!.height)
-  }
+  // 清空结果图片
+  resultImageSrc.value = ''
 
 }
 
@@ -444,8 +431,13 @@ function handleSingleFace(face: any, faceBox: number[], faceRatio: number, front
   if (faceRatio > props.minFaceRatio && faceRatio < props.maxFaceRatio && frontal >= props.minFrontal) {
     console.log('[FaceDetector] Valid face detected, drawing green')
     if (!canvasCtx) return
-    canvasCtx.clearRect(0, 0, videoWidth.value, videoHeight.value)
-    drawFaces(canvasCtx, [face], 'green')
+    
+    // 获取实际的 canvas 显示尺寸
+    const actualCanvasWidth = canvasRef.value!.clientWidth
+    const actualCanvasHeight = canvasRef.value!.clientHeight
+    
+    canvasCtx.clearRect(0, 0, actualCanvasWidth, actualCanvasHeight)
+    drawFaces(canvasCtx, [face], 'green', actualCanvasWidth, actualCanvasHeight, videoWidth.value, videoHeight.value)
     
     // 根据检测模式处理
     if (props.mode === DetectionMode.COLLECTION) {
@@ -459,8 +451,12 @@ function handleSingleFace(face: any, faceBox: number[], faceRatio: number, front
     // 人脸不符合条件，继续检测
     console.log('[FaceDetector] Face not valid, ratio:', faceRatio, 'frontal:', frontal)
     if (canvasCtx) {
-      canvasCtx.clearRect(0, 0, videoWidth.value, videoHeight.value)
-      drawFaces(canvasCtx, [face], 'orange')
+      // 获取实际的 canvas 显示尺寸
+      const actualCanvasWidth = canvasRef.value!.clientWidth
+      const actualCanvasHeight = canvasRef.value!.clientHeight
+      
+      canvasCtx.clearRect(0, 0, actualCanvasWidth, actualCanvasHeight)
+      drawFaces(canvasCtx, [face], 'orange', actualCanvasWidth, actualCanvasHeight, videoWidth.value, videoHeight.value)
     }
     scheduleNextDetection()
   }
@@ -565,7 +561,18 @@ async function detect(): Promise<void> {
       scheduleNextDetection(CONFIG.DETECTION.DETECTION_FRAME_DELAY)
       return
     }
-    canvasCtx.clearRect(0, 0, videoWidth.value, videoHeight.value)
+    
+    // 获取实际的 canvas 显示尺寸
+    const actualCanvasWidth = canvasRef.value!.clientWidth
+    const actualCanvasHeight = canvasRef.value!.clientHeight
+    
+    // 如果 canvas 实际尺寸与设定的属性不一致，需要调整
+    if (canvasRef.value!.width !== actualCanvasWidth || canvasRef.value!.height !== actualCanvasHeight) {
+      canvasRef.value!.width = actualCanvasWidth
+      canvasRef.value!.height = actualCanvasHeight
+    }
+    
+    canvasCtx.clearRect(0, 0, actualCanvasWidth, actualCanvasHeight)
     
     // 获取检测到的所有人脸
     const faces = result.face || []
@@ -831,8 +838,8 @@ function detectAction(action: string, gestures: any): boolean {
     })
     
   } else if (action === LivenessAction.NOD && gestures) {
-    // 点头检测：使用 head 动作序列判定
-    // 规则：检测到 "head up" -> "head down" -> "head up" 这样的序列
+    // 点头检测优化：只要检测到抬头或者低头，就算通过
+    // 简化规则：只需检测到 "head up" 或 "head down"
     
     // 获取当前帧的 head 动作
     const currentHead = gestures.find((g: any) => g.gesture?.includes('head'))?.gesture
@@ -841,21 +848,9 @@ function detectAction(action: string, gestures: any): boolean {
       // 提取 head 方向（up/down）
       const headDirection = currentHead.match(/(up|down)/)?.[0]
       
-      if (headDirection && headDirection !== detectionState.nodSequence[detectionState.nodSequence.length - 1]) {
-        // 方向改变时，添加到序列中
-        detectionState.nodSequence.push(headDirection)
-        
-        // 检查是否完成了点头动作
-        // 检测模式：up -> down -> up（模拟点头的上-下-上运动）
-        if (detectionState.nodSequence.length >= CONFIG.LIVENESS.NOD_SEQUENCE_LENGTH) {
-          const seq = detectionState.nodSequence
-          const isNodGesture = seq[seq.length - 3] === 'up' && seq[seq.length - 2] === 'down' && seq[seq.length - 1] === 'up'
-          
-          if (isNodGesture) {
-            detectionState.nodSequence = [] // 重置序列
-            return true
-          }
-        }
+      // 只要检测到抬头(up)或低头(down)就通过
+      if (headDirection) {
+        return true
       }
     }
   }
@@ -865,66 +860,11 @@ function detectAction(action: string, gestures: any): boolean {
 
 // ===== 工具方法 =====
 /**
- * 显示捕获的人脸图片到结果画布上
+ * 显示捕获的人脸图片到结果图片元素上
  */
 function displayResultImage(resultImageBase64: string): void {
-  if (!resultImageBase64 || !resultCanvasRef.value) return
-  
-  try {
-    // 创建图片对象
-    const img = new Image()
-    img.onload = () => {
-      // 获取结果画布的宽高
-      const canvasWidth = resultCanvasRef.value!.width
-      const canvasHeight = resultCanvasRef.value!.height
-      
-      // 在结果画布上绘制图片
-      if (!resultCanvasCtx) {
-        console.error('[FaceDetector] Result canvas context is not available')
-        return
-      }
-      
-      // 清空画布
-      resultCanvasCtx.clearRect(0, 0, canvasWidth, canvasHeight)
-      
-      // 图片宽高
-      const imgWidth = img.width
-      const imgHeight = img.height
-      
-      // 计算缩放比例，保持图片宽高比填充画布
-      const scale = Math.max(canvasWidth / imgWidth, canvasHeight / imgHeight)
-      
-      // 缩放后的尺寸
-      const scaledWidth = imgWidth * scale
-      const scaledHeight = imgHeight * scale
-      
-      // 在画布中央绘制（居中）
-      const drawX = (canvasWidth - scaledWidth) / 2
-      const drawY = (canvasHeight - scaledHeight) / 2
-      
-      // 直接绘制整个图片，保持宽高比，CSS会通过圆形裁切处理
-      resultCanvasCtx.drawImage(img, drawX, drawY, scaledWidth, scaledHeight)
-      
-      console.log('[FaceDetector] Image displayed on result canvas (CSS circle clipping)', {
-        imgWidth,
-        imgHeight,
-        scale,
-        scaledWidth,
-        scaledHeight,
-        canvasWidth,
-        canvasHeight,
-        aspectRatio: `${imgWidth}:${imgHeight}`
-      })
-    }
-    
-    img.onerror = () => {
-      console.error('[FaceDetector] Failed to load captured face image')
-    }
-    
-    img.src = resultImageBase64
-  } catch (e) {
-    console.error('[FaceDetector] Failed to display captured face image:', e)
-  }
+  if (!resultImageBase64) return
+  resultImageSrc.value = resultImageBase64
 }
 
 /**
@@ -1154,16 +1094,24 @@ async function performSilentLivenessDetection(): Promise<void> {
  * @param {CanvasRenderingContext2D} ctx - 画布上下文
  * @param {Array} faces - 人脸数组
  * @param {string} color - 检测框颜色
+ * @param {number} canvasWidth - canvas 实际显示宽度
+ * @param {number} canvasHeight - canvas 实际显示高度
+ * @param {number} videoWidth - 视频源宽度
+ * @param {number} videoHeight - 视频源高度
  */
-function drawFaces(ctx: CanvasRenderingContext2D, faces: any[], color: string): void {
+function drawFaces(ctx: CanvasRenderingContext2D, faces: any[], color: string, canvasWidth: number, canvasHeight: number, videoWidth: number, videoHeight: number): void {
+  // 计算缩放比例
+  const scaleX = canvasWidth / videoWidth
+  const scaleY = canvasHeight / videoHeight
+  
   faces.forEach(f => {
     const box = f.box || f.boxRaw
     if (box) {
-      // box 格式：[x, y, width, height]
-      const x = box[0]
-      const y = box[1]
-      const width = box[2]
-      const height = box[3]
+      // box 格式：[x, y, width, height]，基于视频源坐标
+      const x = box[0] * scaleX
+      const y = box[1] * scaleY
+      const width = box[2] * scaleX
+      const height = box[3] * scaleY
       
       // 绘制矩形框
       ctx.strokeStyle = color
@@ -1224,16 +1172,16 @@ video {
   border-radius: 50%;  /* 圆形 */
 }
 
-/* 结果画布样式（检测时透明隐藏，完成后显示结果） */
-.result-canvas {
+/* 结果图片样式（检测时透明隐藏，完成后显示结果） */
+.result-image {
   position: absolute;
   width: 100%;
   height: 100%;
   aspect-ratio: 1;
   background: transparent;
+  object-fit: cover;
   box-sizing: border-box;
   border-radius: 50%;  /* 圆形裁剪 */
-  overflow: hidden;    /* 超出部分隐藏 */
 }
 
 /* 检测框画布样式（z-index最高，在所有元素上方） */
