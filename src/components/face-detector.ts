@@ -27,6 +27,15 @@ export enum LivenessAction {
 }
 
 /**
+ * 活体检测动作描述映射表
+ */
+export const ACTION_DESCRIPTIONS: Record<string, string> = {
+  [LivenessAction.BLINK]: '眨眼',
+  [LivenessAction.MOUTH_OPEN]: '张嘴',
+  [LivenessAction.NOD]: '点头'
+}
+
+/**
  * FaceDetector 组件 Props 接口
  */
 export interface FaceDetectorProps {

@@ -2,10 +2,6 @@
 <template>
   <!-- 主容器，根据移动设备状态动态添加样式类 -->
   <div class="face-detector" :class="{ 'is-mobile': isMobileDevice }">
-    <!-- 设备信息展示：显示设备类型和屏幕方向 -->
-    <div class="device-info">
-      设备: {{ deviceInfo }} | 方向: {{ orientationLabel }}
-    </div>
     <!-- 视频容器：包含视频元素和绘制检测结果的画布 -->
     <div class="video-container">
       <!-- 视频元素：用于捕获摄像头实时视频流 -->
@@ -26,8 +22,8 @@ import { ref, computed, onMounted, onUnmounted, Ref } from 'vue'
 // 导入人脸检测库
 import Human from '@vladmandic/human'
 // 导入类型定义
-import type { FaceInfo, FaceCollectedData, LivenessCompletedData, LivenessActionData, ErrorData, FaceDetectorProps } from '../types/face-detector'
-import { DetectionMode, LivenessAction } from '../types/face-detector'
+import type { FaceInfo, FaceCollectedData, LivenessCompletedData, LivenessActionData, ErrorData, FaceDetectorProps } from './face-detector'
+import { DetectionMode, LivenessAction, ACTION_DESCRIPTIONS } from './face-detector'
 
 // 定义组件 props
 const props = withDefaults(defineProps<FaceDetectorProps>(), {
@@ -96,8 +92,6 @@ let silentLivenessCapturedImage: string | null = null
 let currentRandomAction: string | null = null
 // 当前动作的完成次数
 let currentActionCompletedCount: number = 0
-// 当前动作的开始时间戳
-let currentActionStartTime: number = 0
 // 当前动作的超时定时器
 let actionTimeoutId: ReturnType<typeof setTimeout> | null = null
 // 摄像头上显示的提示文本
@@ -146,24 +140,36 @@ onUnmounted(() => {
   window.removeEventListener('orientationchange', handleOrientationChange)
 })
 
+// ===== 常量定义 =====
+const CONSTANTS = Object.freeze({
+  VIDEO_LOAD_TIMEOUT: 5000,
+  MOBILE_VIDEO_WIDTH_OFFSET: 40,
+  MOBILE_VIDEO_HEIGHT_OFFSET: 200,
+  MOBILE_MAX_WIDTH: 480,
+  MOBILE_MAX_HEIGHT: 640,
+  DESKTOP_VIDEO_WIDTH: 640,
+  DESKTOP_VIDEO_HEIGHT: 480,
+  MOBILE_WIDTH_THRESHOLD: 768
+})
+
 // ===== 设备检测与方向处理 =====
 /**
  * 检测设备类型和屏幕方向，并调整视频尺寸
  */
 function detectDevice(): void {
   // 判断是否为移动设备
-  isMobileDevice.value = navigator.userAgent.toLowerCase().match(/android|iphone/) !== null || window.innerWidth < 768
+  isMobileDevice.value = navigator.userAgent.toLowerCase().match(/android|iphone/) !== null || window.innerWidth < CONSTANTS.MOBILE_WIDTH_THRESHOLD
   // 判断是否为竖屏
   isPortrait.value = window.innerHeight >= window.innerWidth
   
   if (isMobileDevice.value) {
     // 移动设备：尽量适配屏幕尺寸
-    videoWidth.value = Math.min(window.innerWidth - 40, 480)
-    videoHeight.value = Math.min(window.innerHeight - 200, 640)
+    videoWidth.value = Math.min(window.innerWidth - CONSTANTS.MOBILE_VIDEO_WIDTH_OFFSET, CONSTANTS.MOBILE_MAX_WIDTH)
+    videoHeight.value = Math.min(window.innerHeight - CONSTANTS.MOBILE_VIDEO_HEIGHT_OFFSET, CONSTANTS.MOBILE_MAX_HEIGHT)
   } else {
     // 桌面设备：使用固定尺寸
-    videoWidth.value = 640
-    videoHeight.value = 480
+    videoWidth.value = CONSTANTS.DESKTOP_VIDEO_WIDTH
+    videoHeight.value = CONSTANTS.DESKTOP_VIDEO_HEIGHT
   }
 }
 
@@ -181,12 +187,6 @@ function handleOrientationChange(): void {
     setTimeout(() => startDetection(), 500)
   }
 }
-
-// ===== 计算属性 =====
-// 设备信息文本
-const deviceInfo = computed(() => isMobileDevice.value ? '移动设备' : '桌面设备')
-// 屏幕方向文本
-const orientationLabel = computed(() => isPortrait.value ? '竖屏' : '横屏')
 
 // ===== 检测控制方法 =====
 /**
@@ -220,7 +220,7 @@ async function startDetection(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Video loading timeout'))
-      }, 5000)
+      }, CONSTANTS.VIDEO_LOAD_TIMEOUT)
       
       const onCanPlay = () => {
         clearTimeout(timeout)
@@ -281,7 +281,6 @@ function stopDetection(success: boolean = false): void {
   silentLivenessCapturedImage = null
   currentRandomAction = null
   currentActionCompletedCount = 0
-  currentActionStartTime = 0
   actionPromptText.value = ''
 }
 
@@ -557,7 +556,6 @@ function selectNextRandomAction(): void {
   // 随机选择一个动作
   currentRandomAction = availableActions[Math.floor(Math.random() * availableActions.length)]
   currentActionCompletedCount = 0
-  currentActionStartTime = Date.now()
   
   // 更新提示文本
   updateActionPrompt(currentRandomAction)
@@ -579,12 +577,7 @@ function selectNextRandomAction(): void {
  * 获取动作的描述文本
  */
 function getActionDescription(action: string): string {
-  const descriptions: Record<string, string> = {
-    blink: '眨眼',
-    mouth_open: '张嘴',
-    nod: '点头'
-  }
-  return descriptions[action] || action
+  return ACTION_DESCRIPTIONS[action] || action
 }
 
 /**

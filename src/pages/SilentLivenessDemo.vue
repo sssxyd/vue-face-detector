@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { ref, Ref } from 'vue'
 import FaceDetector from '../components/FaceDetector.vue'
-import { FaceInfo } from '../types/face-detector'
+import { FaceInfo } from '../components/face-detector'
 
 // 人脸检测参数
 const minFaceRatio: Ref<number> = ref(50)  // 最小人脸占比(%)
