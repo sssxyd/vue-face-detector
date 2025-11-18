@@ -30,7 +30,7 @@ const props = withDefaults(defineProps<FaceDetectorProps>(), {
   mode: DetectionMode.COLLECTION,
   livenessChecks: () => [LivenessAction.BLINK, LivenessAction.NOD],
   minFaceRatio: 50,
-  maxFaceRatio: 80,
+  maxFaceRatio: 90,
   minFrontal: 90,
   silentLivenessThreshold: 90,  // 静默活体检测阈值 (百分比: 0-100)
   livenessActionCount: 1,        // 活体检测动作次数，默认为1
