@@ -1,38 +1,25 @@
 # js-face-detector
 
-Vue 3 人脸检测组件 Demo，基于 [human.js](https://github.com/vladmandic/human) 实现。
+Vue 3 人脸检测组件库，基于 [Human.js](https://github.com/vladmandic/human) 实现，提供三种完整的人脸检测模式。
 
-## 功能特性
+## 功能概览
 
-### 1. 人脸检测
-- ✅ 检测视频中的人脸
-- ✅ 验证有且仅有一张正脸
-- ✅ 确保脸部完整
-- ✅ 验证人脸占据画面的合适比例（15%-70%）
-- ✅ 多种错误提示：
-  - 未检测到人脸
-  - 检测到多张人脸
-  - 距离太远/太近
-  - 请正对摄像头
-  - 人脸不完整
-
-### 2. 活体人脸检测（可选）
-- ✅ 在人脸检测成功后，随机提示用户执行动作
-- ✅ 支持的动作检测：
-  - 张嘴
-  - 眨眼
-  - 左右摇头
-- ✅ 检测过程中的安全验证：
-  - 如果出现第二张人脸，检测失败
-  - 如果人脸消失，检测失败
+- ✅ **三种检测模式**：人脸采集、动作活体验证、静默活体检测
+- ✅ **实时人脸检测**：从摄像头捕获人脸并进行实时验证
+- ✅ **精确的人脸位置检验**：验证有且仅有一张正脸，并检查人脸占比和正对度
+- ✅ **多种活体检测方式**：支持眨眼、张嘴、点头等多种动作识别
+- ✅ **图像质量检测与自动重采**：智能检测图像清晰度，模糊图片自动重采集直到满足质量要求
+- ✅ **防止换人算法**：检测过程中实时监控人脸数量变化，防止检测中途换人
+- ✅ **详细的调试信息**：提供完整的检测过程日志便于问题诊断
+- ✅ **移动设备适配**：完全支持移动设备，自适应屏幕方向变化
 
 ## 技术栈
 
-- Vue 3
-- Vite
-- @vladmandic/human (人脸检测库)
+- Vue 3 + TypeScript
+- Vite 构建工具
+- @vladmandic/human (AI 检测引擎)
 
-## 安装和运行
+## 快速开始
 
 ### 安装依赖
 ```bash
@@ -44,64 +31,692 @@ npm install
 npm run dev
 ```
 
-然后在浏览器中访问 `http://localhost:3000`
+在浏览器中访问 `http://localhost:5173`
 
 ### 构建生产版本
 ```bash
 npm run build
 ```
 
-### 预览生产构建
-```bash
-npm run preview
+## 核心组件：FaceDetector
+
+### 三种检测模式
+
+#### 1. **采集模式（COLLECTION）**
+检测到符合条件的正脸后自动采集图片。
+
+**模式属性：**
+```typescript
+interface CollectionModeProps {
+  mode: 'collection'
+  minFaceRatio?: number        // 最小人脸占比 (0-1)，默认 0.5
+  maxFaceRatio?: number        // 最大人脸占比 (0-1)，默认 0.9
+  minFrontal?: number          // 最小正脸置信度 (0-1)，默认 0.9
+}
 ```
 
-## 使用说明
+**模式事件：**
+```typescript
+// 人脸被检测到
+@face-detected="(data: FaceDetectedData) => {
+  count: number              // 检测到的人脸数量
+  size: number               // 人脸占画面比例 (0-1)
+  frontal: number            // 人脸正对度 (0-1)
+}"
 
-1. **开始人脸检测**：点击"开始人脸检测"按钮，允许浏览器访问摄像头
-2. **调整位置**：根据提示调整与摄像头的距离和角度，直到检测成功
-3. **活体检测**（可选）：检测成功后，点击"开始活体检测"按钮
-4. **完成动作**：按照屏幕提示完成指定动作（张嘴、眨眼、摇头）
-5. **检测完成**：所有动作完成后，活体检测成功
+// 人脸成功采集
+@face-collected="(data: FaceCollectedData) => {
+  imageData: string | null   // 采集的 Base64 图片数据
+}"
 
-## 组件说明
+// 检测过程出错
+@error="(data: ErrorData) => {
+  code: ErrorCode            // 错误代码
+  message: string            // 错误信息
+}"
+```
 
-### FaceDetector.vue
+**使用示例：**
+```vue
+<FaceDetector
+  mode="collection"
+  :min-face-ratio="0.5"
+  :max-face-ratio="0.9"
+  :min-frontal="0.9"
+  @face-detected="handleFaceDetected"
+  @face-collected="handleFaceCollected"
+  @error="handleError"
+/>
+```
 
-主要的人脸检测组件，包含以下功能：
+---
 
-- **视频流捕获**：从摄像头获取视频流
-- **实时检测**：使用 human.js 进行实时人脸检测
-- **视觉反馈**：在视频上绘制人脸边界框，不同颜色表示不同状态
-  - 绿色：检测成功
-  - 黄色：距离问题
-  - 橙色：角度或多人问题
-  - 蓝色：活体检测中
-  - 红色：活体检测失败
-- **状态提示**：实时显示检测状态和错误信息
-- **活体检测**：随机选择2-3个动作进行验证
+#### 2. **动作活体检测模式（LIVENESS）**
+要求用户执行指定的活体动作（眨眼、张嘴、点头）来验证真人身份。
+
+**模式属性：**
+```typescript
+interface LivenessModeProps {
+  mode: 'liveness'
+  liveness-checks?: LivenessAction[]     // 支持的动作数组
+  liveness-action-count?: number         // 需要完成的动作数量，默认 1
+  liveness-action-timeout?: number       // 每个动作的超时时间（秒），默认 60
+  show-action-prompt?: boolean           // 是否显示动作提示文本，默认 true
+  minFaceRatio?: number
+  maxFaceRatio?: number
+  minFrontal?: number
+}
+```
+
+**模式事件：**
+```typescript
+// 动作检测状态变化
+@liveness-action="(data: LivenessActionData) => {
+  action: LivenessAction                 // 当前动作
+  description: string                    // 动作描述
+  status: LivenessActionStatus           // 动作状态: started|completed|timeout
+}"
+
+// 活体检测完成
+@liveness-completed="(data: LivenessCompletedData) => {
+  imageData: string | null               // 采集的 Base64 图片数据
+  liveness: number                       // 活体置信度 (0-1)
+}"
+
+@face-detected    // 同采集模式
+@error            // 同采集模式
+```
+
+**使用示例：**
+```vue
+<FaceDetector
+  mode="liveness"
+  :liveness-checks="[
+    LivenessAction.BLINK,
+    LivenessAction.MOUTH_OPEN,
+    LivenessAction.NOD
+  ]"
+  :liveness-action-count="2"
+  :liveness-action-timeout="60"
+  :show-action-prompt="true"
+  @liveness-action="handleLivenessAction"
+  @liveness-completed="handleLivenessCompleted"
+  @error="handleError"
+/>
+```
+
+---
+
+#### 3. **静默活体检测模式（SILENT_LIVENESS）**
+自动采集图片后进行活体检测，无需用户执行任何动作，完全自动化。
+
+**模式属性：**
+```typescript
+interface SilentLivenessModeProps {
+  mode: 'silent_liveness'
+  silent-liveness-threshold?: number     // 活体置信度阈值 (0-1)，默认 0.85
+  minFaceRatio?: number
+  maxFaceRatio?: number
+  minFrontal?: number
+}
+```
+
+**模式事件：**
+```typescript
+// 活体检测数据（实时更新）
+@liveness-detected="(data: LivenessDetectedData) => {
+  real: number                           // 反欺骗得分 (0-1)
+  live: number                           // 活体检测得分 (0-1)
+}"
+
+// 活体检测完成
+@liveness-completed="(data: LivenessCompletedData) => {
+  imageData: string | null               // 采集的 Base64 图片数据
+  liveness: number                       // 最终活体置信度 (0-1)
+}"
+
+@face-detected    // 同采集模式
+@error            // 同采集模式
+```
+
+**使用示例：**
+```vue
+<FaceDetector
+  mode="silent_liveness"
+  :silent-liveness-threshold="0.85"
+  @liveness-detected="handleLivenessDetected"
+  @liveness-completed="handleLivenessCompleted"
+  @error="handleError"
+/>
+```
+
+---
+
+### 支持的活体动作
+
+| 动作 | 枚举值 | 描述 | 实现原理 |
+|-----|------|------|--------|
+| **眨眼** | `BLINK` | 快速闭上眼睛 | 通过 Human.js 的手势识别检测眼睛的开闭状态变化 |
+| **张嘴** | `MOUTH_OPEN` | 张开嘴巴 | 检测嘴巴打开百分比，超过 20% 则判定为张嘴状态 |
+| **点头** | `NOD` | 上下摇头 | 识别头部的上下运动方向，包括抬头(up)和低头(down) |
+
+**动作检测代码示例：**
+```typescript
+// 眨眼检测
+function isBlinkDetected(gestures: any): boolean {
+  return gestures?.some((g: any) => g.gesture?.includes('blink')) ?? false
+}
+
+// 张嘴检测（>20% 打开度）
+function isMouthOpenDetected(gestures: any): boolean {
+  return gestures.some((g: any) => {
+    const percentMatch = g.gesture?.match(/mouth (\d+)% open/)?.[1]
+    const percent = percentMatch ? parseInt(percentMatch) : 0
+    return percent > 20
+  })
+}
+
+// 点头检测（包括抬头和低头）
+function isNodDetected(gestures: any): boolean {
+  const currentHead = gestures.find((g: any) => g.gesture?.includes('head'))?.gesture
+  return !!currentHead?.match(/(up|down)/)
+}
+```
+
+---
+
+### 图像质量检测与自动重采集
+
+为了保证采集到的图片质量，组件内置了**自动图像质量检测机制**。当采集到的图片模糊或质量不足时，会自动提示用户并继续采集，直到获得满足质量要求的图片。
+
+#### 质量检测原理
+
+Human.js 在人脸检测时会返回三个关键的质量指标，通过这些指标可以有效判断图像是否清晰：
+
+| 指标 | 含义 | 最佳阈值 | 对图像清晰度的反映度 |
+|-----|------|---------|------------------|
+| **boxScore** | 人脸检测框置信度 | ≥ 0.6 | 低 (粗略定位) |
+| **faceScore** | 人脸网格置信度 ⭐ | ≥ 0.8 | 高 (精确定位 468 个点) |
+| **score** | 综合评分 | ≥ 0.7 | 中等 |
+
+**关键发现**：`faceScore` 最能反映图像是否清晰！
+- 原理：Human.js 需要检测面部的 468 个网格点
+- 清晰图像 → 网格点检测精确 → faceScore 高 ✓
+- 模糊图像 → 网格点检测困难 → faceScore 低 ✗
+
+#### 质量检测的工作流程
+
+```
+采集模式 (COLLECTION):
+  检测到合格人脸
+      ↓
+  捕获图片
+      ↓
+  检查质量 ← 新增
+      ├─ ✓ 通过 → 返回图片，采集完成
+      └─ ✗ 失败 → 提示"图像质量不足，请调整角度再试"
+                 继续采集新帧 ↑
+
+静默活体检测 (SILENT_LIVENESS):
+  检测到合格人脸
+      ↓
+  捕获图片
+      ↓
+  检查质量 ← 新增（第1次）
+      ├─ ✗ 失败 → 继续采集新帧 ↑
+      └─ ✓ 通过 → 进行活体检测
+                 ├─ ✗ 失败 → 继续采集 ↑
+                 └─ ✓ 通过 → 再检查质量 ← 新增（第2次）
+                            ├─ ✗ 失败 → 重新采集 ↑
+                            └─ ✓ 通过 → 返回结果 ✓
+```
+
+#### 配置质量阈值
+
+```typescript
+// src/components/face-detector.ts 中的配置
+
+CONFIG.IMAGE_QUALITY = {
+  // 检测框置信度阈值 (0-1)
+  // 推荐: 0.5-0.7（越低越容易通过）
+  MIN_BOX_SCORE: 0.6,
+  
+  // 网格置信度阈值 (0-1)
+  // 推荐: 0.75-0.85（最关键指标）
+  MIN_FACE_SCORE: 0.8,
+  
+  // 综合分数阈值 (0-1)
+  // 推荐: 0.6-0.75
+  MIN_OVERALL_SCORE: 0.7
+}
+```
+
+#### 场景推荐配置
+
+| 场景 | MIN_BOX_SCORE | MIN_FACE_SCORE | MIN_OVERALL_SCORE | 说明 |
+|------|---|---|---|---|
+| **严格采集** | 0.7 | 0.85 | 0.8 | 采集最清晰的图片，采集时间较长 |
+| **标准采集** | 0.6 | **0.8** | **0.7** | **推荐** ← 推荐使用 |
+| **快速采集** | 0.5 | 0.75 | 0.65 | 采集快速但质量一般 |
+| **演示/测试** | 0.3 | 0.5 | 0.4 | 演示环境 |
+
+#### 质量检测事件
+
+通过 `@debug` 事件可以监听图像质量检测的详细信息：
+
+```typescript
+@debug="(debug) => {
+  if (debug.stage === 'quality-check') {
+    console.log('质量检测结果:', debug.details)
+    // 输出例:
+    // {
+    //   passed: false,
+    //   score: 0.75,
+    //   boxScore: 0.65,
+    //   faceScore: 0.75,
+    //   overallScore: 0.75,
+    //   reasons: ['图像模糊 (faceScore: 0.75 < 0.8)']
+    // }
+  }
+}"
+```
+
+#### 实时质量评分示例
+
+```vue
+<template>
+  <div>
+    <FaceDetector
+      mode="collection"
+      @face-detected="(data) => {
+        faceScore = data.quality?.faceScore || 0
+      }"
+      @debug="(debug) => {
+        if (debug.stage === 'quality-check') {
+          qualityPassed = debug.details.passed
+          qualityScore = debug.details.score
+          qualityReasons = debug.details.reasons
+        }
+      }"
+    />
+    
+    <!-- 质量显示 -->
+    <div class="quality-panel">
+      <p>图像质量: {{ (qualityScore * 100).toFixed(0) }}%</p>
+      <p :class="qualityPassed ? 'success' : 'warning'">
+        {{ qualityPassed ? '✓ 质量符合' : '✗ 质量不足' }}
+      </p>
+      <ul v-if="qualityReasons.length">
+        <li v-for="reason in qualityReasons" :key="reason">{{ reason }}</li>
+      </ul>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import FaceDetector from './components/FaceDetector.vue'
+
+const qualityScore = ref(0)
+const qualityPassed = ref(false)
+const qualityReasons = ref<string[]>([])
+</script>
+
+<style scoped>
+.quality-panel {
+  padding: 20px;
+  border-radius: 8px;
+  background: #f5f5f5;
+}
+
+.success {
+  color: #42b983;
+}
+
+.warning {
+  color: #f5a623;
+}
+</style>
+```
+
+#### 常见问题
+
+**Q: 为什么采集时间很长？**  
+A: 可能是光线不足或角度不对。建议：
+- 增加环境光线照度
+- 调整脸部角度，保持正脸
+- 提高设备摄像头质量
+- 可适当降低 `MIN_FACE_SCORE` 阈值
+
+**Q: 采集到的图片还是模糊？**  
+A: 可能的原因：
+1. 光线太暗 → 增加光线
+2. 距离太远 → 靠近摄像头（30-50cm）
+3. 角度不对 → 保持正脸对向摄像头
+4. 设备问题 → 更换设备或清洁镜头
+
+**Q: faceScore 代表什么？**  
+A: faceScore 是人脸网格的置信度。Human.js 需要检测 468 个面部网格点，清晰的图像才能精确定位这些点。因此 **faceScore 最能反映图像是否清晰**。
+
+#### 性能影响
+
+- **计算开销**: 0（使用已有的检测结果，无额外计算）
+- **内存占用**: 0（无新数据结构）
+- **采集延迟**: +500-2000ms（取决于光线和角度）
+- **采集成功率**: ↑ 提升（采集到更清晰的图片）
+
+---
+
+### 防止换人算法
+
+项目采用**实时人脸数量监控**机制来防止检测过程中换人：
+
+#### 核心算法原理
+
+1. **状态跟踪**
+   - 在活体检测开始时，标记 `isLivenessStarted` 为 true
+   - 记录初始采集的人脸基线图像
+
+2. **每帧检验**
+   - 每一帧检测结果都调用 `shouldStopLivenessOnFaceCountChange()` 进行验证
+   - 检查当前帧中的人脸数量是否为 1
+
+3. **异常检测**
+   ```typescript
+   function shouldStopLivenessOnFaceCountChange(faceCount: number): boolean {
+     // 在 LIVENESS 模式下，已开始检测但人脸数量不为 1 时应中止
+     if (props.mode === DetectionMode.LIVENESS && 
+         detectionState.isLivenessStarted && 
+         faceCount !== 1) {
+       return true  // 触发停止
+     }
+     
+     // 在 SILENT_LIVENESS 模式下，已开始检测但人脸数量不为 1 时应中止
+     if (props.mode === DetectionMode.SILENT_LIVENESS && 
+         detectionState.isSilentLivenessStarted && 
+         faceCount !== 1) {
+       return true  // 触发停止
+     }
+     
+     return false
+   }
+   ```
+
+4. **失败处理**
+   - 检测到人脸数量变化时立即停止检测
+   - 返回错误码 `FACE_COUNT_CHANGED`
+   - 提示用户"检测到人脸数量变化，请保持正脸对着摄像头，重新开始检测"
+   - 将视频容器边框颜色改为红色（错误状态）
+
+#### 防护场景
+
+- **防止换人**：A 人开始检测后，B 人试图接手会被立即检测到
+- **防止遮挡**：人脸被遮挡导致检测失败也会被发现
+- **防止舍弃**：用户在检测过程中转身离开摄像头会被检测到
+- **防止多人欺诈**：两个人脸同时出现在画面中会立即失败
+
+#### 检测流程图
+
+```
+初始状态 (isLivenessStarted = false)
+    ↓
+检测到符合条件的单张人脸
+    ↓
+设置 isLivenessStarted = true
+采集基线图像
+    ↓
+------- 循环检测每一帧 -------
+    ↓
+检查人脸数量 === 1?
+    ├─ 是 → 继续活体检测
+    └─ 否 → 立即停止，返回错误
+    ↓
+执行相应的活体动作检测
+    ↓
+动作完成或超时?
+    ├─ 完成 → 检查是否全部完成
+    │         ├─ 是 → 活体检测成功
+    │         └─ 否 → 选择下一个动作
+    └─ 超时 → 返回错误
+```
+
+---
+
+## 组件属性完整参考
+
+```typescript
+interface FaceDetectorProps {
+  // 工作模式
+  mode?: DetectionMode | string          // 'collection' | 'liveness' | 'silent_liveness'
+  
+  // 人脸位置检验
+  minFaceRatio?: number                  // 最小人脸占比，默认 0.5
+  maxFaceRatio?: number                  // 最大人脸占比，默认 0.9
+  minFrontal?: number                    // 最小正脸置信度，默认 0.9
+  
+  // 活体检测（仅 LIVENESS 模式）
+  livenessChecks?: LivenessAction[]      // 支持的动作列表
+  livenessActionCount?: number           // 需要完成的动作数，默认 1
+  livenessActionTimeout?: number         // 每个动作超时（秒），默认 60
+  showActionPrompt?: boolean             // 是否显示提示文本，默认 true
+  
+  // 静默活体检测（仅 SILENT_LIVENESS 模式）
+  silentLivenessThreshold?: number       // 活体置信度阈值，默认 0.85
+  
+  // Human.js 配置
+  humanConfig?: Record<string, any>      // 自定义 Human.js 配置
+}
+```
+
+---
+
+## 事件详解
+
+### 通用事件
+
+```typescript
+// 人脸被检测到
+interface FaceDetectedData {
+  count: number                          // 检测到的人脸数量
+  size: number                           // 人脸占画面比例
+  frontal: number                        // 人脸正对度
+}
+
+// 错误发生
+interface ErrorData {
+  code: ErrorCode                        // 错误代码
+  message: string                        // 错误信息
+}
+```
+
+### 采集模式事件
+
+```typescript
+interface FaceCollectedData {
+  imageData: string | null               // Base64 格式的图片数据
+}
+```
+
+### 活体检测模式事件
+
+```typescript
+interface LivenessActionData {
+  action: LivenessAction                 // 动作类型
+  description: string                    // 动作描述（中文）
+  status: LivenessActionStatus           // 动作状态
+}
+
+interface LivenessCompletedData {
+  imageData: string | null               // Base64 格式的图片数据
+  liveness: number                       // 活体置信度 (0-1)
+}
+
+interface LivenessDetectedData {
+  real: number                           // 反欺骗得分 (0-1)
+  live: number                           // 活体检测得分 (0-1)
+}
+```
+
+---
+
+## 调试与日志
+
+组件提供详细的调试信息事件：
+
+```typescript
+interface DebugData {
+  level: 'info' | 'warn' | 'error'      // 日志级别
+  stage: string                          // 当前阶段
+  message: string                        // 主要信息
+  details?: Record<string, any>          // 详细信息
+  timestamp: number                      // 时间戳
+}
+
+@debug="(debugData: DebugData) => {
+  console.log(`[${debugData.stage}] ${debugData.message}`, debugData.details)
+}"
+```
+
+---
+
+## 完整使用示例
+
+### 采集模式示例
+
+```vue
+<template>
+  <FaceDetector
+    mode="collection"
+    :min-face-ratio="0.5"
+    :max-face-ratio="0.9"
+    :min-frontal="0.9"
+    @face-detected="handleFaceDetected"
+    @face-collected="handleFaceCollected"
+    @error="handleError"
+  />
+</template>
+
+<script setup lang="ts">
+import FaceDetector from './components/FaceDetector.vue'
+
+function handleFaceDetected(data) {
+  console.log(`人脸数量: ${data.count}, 占比: ${data.size}, 正对度: ${data.frontal}`)
+}
+
+function handleFaceCollected(data) {
+  console.log('图片采集成功，Base64 长度:', data.imageData?.length)
+  // 将 data.imageData 上传到服务器或本地保存
+}
+
+function handleError(error) {
+  console.error(`检测失败: ${error.message}`)
+}
+</script>
+```
+
+### 活体检测模式示例
+
+```vue
+<template>
+  <FaceDetector
+    ref="detectorRef"
+    mode="liveness"
+    :liveness-checks="[
+      LivenessAction.BLINK,
+      LivenessAction.MOUTH_OPEN,
+      LivenessAction.NOD
+    ]"
+    :liveness-action-count="2"
+    :show-action-prompt="true"
+    @liveness-action="handleAction"
+    @liveness-completed="handleCompleted"
+    @error="handleError"
+  />
+</template>
+
+<script setup lang="ts">
+import FaceDetector from './components/FaceDetector.vue'
+import { LivenessAction, LivenessActionStatus } from './components/face-detector'
+
+function handleAction(data) {
+  if (data.status === LivenessActionStatus.STARTED) {
+    console.log(`请开始${data.description}`)
+  } else if (data.status === LivenessActionStatus.COMPLETED) {
+    console.log(`${data.description}检测完成`)
+  }
+}
+
+function handleCompleted(data) {
+  console.log('活体检测成功，置信度:', data.liveness)
+}
+</script>
+```
+
+---
+
+## 注意事项
+
+1. **HTTPS 要求**：摄像头访问需要 HTTPS 环境或 localhost
+2. **浏览器权限**：首次运行需要用户授予摄像头访问权限
+3. **光线条件**：建议在光线充足的环境下使用
+4. **浏览器兼容性**：支持 Chrome、Firefox、Safari、Edge 的最新版本
+5. **移动适配**：自动适配移动设备，支持屏幕方向改变
+
+---
+
+## 文档与工具
+
+### 📚 详细文档
+
+为了帮助你更好地理解和使用图像质量检测功能，我们提供了完整的文档体系：
+
+| 文档 | 用途 | 阅读时间 |
+|------|------|---------|
+| **[README_IMAGE_QUALITY.md](./README_IMAGE_QUALITY.md)** | 完整方案介绍 | 5 分钟 |
+| **[QUICK_START_IMAGE_QUALITY.md](./QUICK_START_IMAGE_QUALITY.md)** | 快速上手指南 | 5 分钟 |
+| **[IMAGE_QUALITY_DETECTION.md](./IMAGE_QUALITY_DETECTION.md)** | 详细技术文档 | 20 分钟 |
+| **[IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)** | 实现原理分析 | 10 分钟 |
+| **[CHECKLIST.md](./CHECKLIST.md)** | 完成清单验证 | 5 分钟 |
+
+### 🧪 交互式测试工具
+
+**ImageQualityTestDemo.vue** - 图像质量检测演示页面
+
+提供实时交互的图像质量检测工具：
+- 🎚️ 动态调整三个质量阈值（boxScore、faceScore、score）
+- 📊 实时显示当前检测的质量评分
+- 📋 完整的检测日志查看器
+- 🖼️ 采集结果图片展示
+- 📈 采集统计信息
+
+---
 
 ## 项目结构
 
 ```
 js-face-detector/
-├── index.html              # HTML 入口
-├── package.json            # 项目配置
-├── vite.config.js          # Vite 配置
 ├── src/
-│   ├── main.js             # 应用入口
-│   ├── App.vue             # 根组件
-│   └── components/
-│       └── FaceDetector.vue # 人脸检测组件
-└── dist/                   # 构建输出目录
+│   ├── components/
+│   │   ├── FaceDetector.vue           # 主检测组件
+│   │   └── face-detector.ts           # 类型定义和常量
+│   ├── pages/
+│   │   ├── FaceCollectorDemo.vue      # 采集模式演示
+│   │   ├── AliveCheckerDemo.vue       # 活体检测模式演示
+│   │   ├── SilentLivenessDemo.vue     # 静默活体检测演示
+│   │   └── ImageQualityTestDemo.vue   # 图像质量检测演示 ⭐ 新增
+│   ├── App.vue                        # 应用主组件
+│   └── main.ts                        # 应用入口
+├── README.md                          # 项目说明
+├── README_IMAGE_QUALITY.md            # 图像质量检测方案 ⭐ 新增
+├── QUICK_START_IMAGE_QUALITY.md       # 快速上手指南 ⭐ 新增
+├── IMAGE_QUALITY_DETECTION.md         # 详细技术文档 ⭐ 新增
+├── IMPLEMENTATION_SUMMARY.md          # 实现原理分析 ⭐ 新增
+├── CHECKLIST.md                       # 完成清单 ⭐ 新增
+├── COMPLETION_REPORT.md               # 完成报告 ⭐ 新增
+├── package.json
+├── vite.config.ts
+└── tsconfig.json
 ```
-
-## 注意事项
-
-1. 需要在 HTTPS 环境或 localhost 下运行，才能访问摄像头
-2. 首次运行需要授予浏览器摄像头访问权限
-3. 建议在光线充足的环境下使用
-4. 支持现代浏览器（Chrome、Firefox、Safari、Edge）
 
 ## License
 

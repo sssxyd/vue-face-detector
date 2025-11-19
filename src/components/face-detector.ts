@@ -274,6 +274,15 @@ export const CONFIG = Object.freeze({
     // 反欺骗（anti-spoofing）阈值 - 如果 real 分数低于此值，判定为欺诈
     ANTI_SPOOFING_THRESHOLD: 0.5
   },
+  // 图像质量相关配置
+  IMAGE_QUALITY: {
+    // 最小人脸检测框分数（0-1）- 检测框置信度低于此值表示检测不清晰
+    MIN_BOX_SCORE: 0.6,
+    // 最小人脸网格分数（0-1）- 网格置信度低于此值表示图像模糊或质量差
+    MIN_FACE_SCORE: 0.8,
+    // 最小综合分数（0-1）- 综合评分低于此值表示图像质量不足
+    MIN_OVERALL_SCORE: 0.7
+  },
   // 检测超时相关配置
   TIMEOUT: {
     // 检测总超时时长（毫秒）- 如果60秒内没有检测到合格人脸，则主动退出

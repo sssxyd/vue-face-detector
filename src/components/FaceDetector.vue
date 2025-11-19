@@ -661,12 +661,48 @@ function handleMultipleFaces(faceCount: number): void {
  * 处理采集模式：检测到合格人脸后截取图片
  */
 function handleCollectionMode(): void {
+  // 如果已经采集过基线图片，说明已处于质量检测中，继续收集更好质量的图片
+  if (detectionState.baselineImage && !isDetecting.value) {
+    // 检测完成
+    return
+  }
+  
+  // 第一次采集 - 先采集图片并检测质量
   detectionState.baselineImage = captureFrame()
-  emit(FACE_DETECTOR_EVENTS.FACE_COLLECTED, { 
-    imageData: detectionState.baselineImage 
-  })
-  videoBorderColor.value = BORDER_COLOR_STATES.SUCCESS
-  stopDetection(true)
+  
+  // 当前已有人脸检测结果，从全局 detect 方法中获取的 result 中提取人脸数据
+  // 但由于 detect 中的 result 是局部变量，我们通过 human.result 获取最新检测结果
+  if (human && human.result && human.result.face && human.result.face.length > 0) {
+    const currentFace = human.result.face[0]
+    const qualityCheck = checkImageQuality(currentFace)
+    
+    if (qualityCheck.passed) {
+      emitDebug('quality', '图像质量符合要求，采集完成', { score: qualityCheck.score.toFixed(2) })
+      emit(FACE_DETECTOR_EVENTS.FACE_COLLECTED, { 
+        imageData: detectionState.baselineImage 
+      })
+      videoBorderColor.value = BORDER_COLOR_STATES.SUCCESS
+      stopDetection(true)
+    } else {
+      emitDebug('quality', '图像质量不足，继续采集更好质量的图片', { 
+        score: qualityCheck.score.toFixed(2),
+        reasons: qualityCheck.reasons
+      }, 'warn')
+      actionPromptText.value = '图像质量不足，请调整角度再试'
+      // 重置基线图片，继续采集
+      detectionState.baselineImage = null
+      // 继续检测
+      scheduleNextDetection()
+      return
+    }
+  } else {
+    emitDebug('quality', '无法获取人脸检测结果用于质量评估', {}, 'warn')
+    emit(FACE_DETECTOR_EVENTS.FACE_COLLECTED, { 
+      imageData: detectionState.baselineImage 
+    })
+    videoBorderColor.value = BORDER_COLOR_STATES.SUCCESS
+    stopDetection(true)
+  }
 }
 
 /**
@@ -676,8 +712,27 @@ function handleSilentLivenessMode(): void {
   if (!detectionState.isSilentLivenessStarted) {
     emitDebug('liveness', '静默活体检测开始')
     detectionState.baselineImage = captureFrame()  // 捕获完整摄像头照片
+    
+    // 进行图像质量检查
+    if (human && human.result && human.result.face && human.result.face.length > 0) {
+      const currentFace = human.result.face[0]
+      const qualityCheck = checkImageQuality(currentFace)
+      
+      if (!qualityCheck.passed) {
+        emitDebug('quality', '采集的图像质量不足，继续采集', { 
+          score: qualityCheck.score.toFixed(2),
+          reasons: qualityCheck.reasons
+        }, 'warn')
+        // 重置基线图片，继续采集更好质量的帧
+        detectionState.baselineImage = null
+        scheduleNextDetection()
+        return
+      }
+      
+      emitDebug('quality', '采集的图像质量符合要求', { score: qualityCheck.score.toFixed(2) })
+    }
+    
     detectionState.isSilentLivenessStarted = true
-
     // 异步执行活体检测
     performSilentLivenessDetection()
   } else {
@@ -801,6 +856,51 @@ async function detect(): Promise<void> {
     // 发生错误时继续检测，但增加重试延迟
     scheduleNextDetection(CONFIG.DETECTION.ERROR_RETRY_DELAY)
   }
+}
+
+/**
+ * 检查图像质量是否符合要求
+ * @param {Object} face - 人脸检测结果，包含 boxScore、faceScore、score 等字段
+ * @returns {Object} 包含质量评估结果的对象 { passed: boolean, score: number, reasons: string[] }
+ */
+function checkImageQuality(face: any): { passed: boolean, score: number, reasons: string[] } {
+  const reasons: string[] = []
+  
+  // 获取各个质量指标
+  const boxScore = face.boxScore || 0
+  const faceScore = face.faceScore || 0
+  const overallScore = face.score || 0
+  
+  // 检查人脸检测框置信度
+  if (boxScore < CONFIG.IMAGE_QUALITY.MIN_BOX_SCORE) {
+    reasons.push(`人脸检测不清晰 (boxScore: ${boxScore.toFixed(2)} < ${CONFIG.IMAGE_QUALITY.MIN_BOX_SCORE})`)
+  }
+  
+  // 检查人脸网格置信度（最能反映图像模糊情况）
+  if (faceScore < CONFIG.IMAGE_QUALITY.MIN_FACE_SCORE) {
+    reasons.push(`图像模糊或质量差 (faceScore: ${faceScore.toFixed(2)} < ${CONFIG.IMAGE_QUALITY.MIN_FACE_SCORE})`)
+  }
+  
+  // 检查综合分数
+  if (overallScore < CONFIG.IMAGE_QUALITY.MIN_OVERALL_SCORE) {
+    reasons.push(`整体图像质量不足 (score: ${overallScore.toFixed(2)} < ${CONFIG.IMAGE_QUALITY.MIN_OVERALL_SCORE})`)
+  }
+  
+  const passed = reasons.length === 0
+  const score = Math.max(boxScore, faceScore, overallScore)
+  
+  if (!passed) {
+    emitDebug('quality-check', '图像质量检测未通过', { 
+      passed, 
+      score: score.toFixed(2),
+      boxScore: boxScore.toFixed(2), 
+      faceScore: faceScore.toFixed(2), 
+      overallScore: overallScore.toFixed(2),
+      reasons
+    }, 'warn')
+  }
+  
+  return { passed, score, reasons }
 }
 
 /**
@@ -1193,6 +1293,21 @@ async function performSilentLivenessDetection(): Promise<void> {
 
         // 获取第一张脸的数据
         const faceData = faces[0] as any
+        
+        // 检查图像质量 - 在进行活体检测前先验证采集图片的质量
+        const qualityCheck = checkImageQuality(faceData)
+        if (!qualityCheck.passed) {
+          emitDebug('quality', '采集图片质量不足，重新采集', { 
+            score: qualityCheck.score.toFixed(2),
+            reasons: qualityCheck.reasons
+          }, 'warn')
+          // 重置并继续采集，寻找更清晰的帧
+          detectionState.baselineImage = null
+          detectionState.isSilentLivenessStarted = false
+          actionPromptText.value = '图像质量不足，请调整角度或光线'
+          scheduleNextDetection()
+          return
+        }
         
         emitDebug('liveness', '人脸数据提取', { keys: Object.keys(faceData).slice(0, 10), live: faceData.live, real: faceData.real })
         
