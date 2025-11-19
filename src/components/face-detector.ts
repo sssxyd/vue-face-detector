@@ -67,13 +67,13 @@ export interface FaceDetectorProps {
   mode?: DetectionMode | string
   // 活体检测项目数组：可包含 LivenessAction.BLINK(眨眼) 等（仅用于 LIVENESS 模式）
   livenessChecks?: LivenessAction[]
-  // 人脸占画面比例的最小值（百分比）
+  // 人脸占画面比例的最小值（0-1）
   minFaceRatio?: number
-  // 人脸占画面比例的最大值（百分比）
+  // 人脸占画面比例的最大值（0-1）
   maxFaceRatio?: number
-  // 正脸置信度的最小值（百分比）
+  // 正脸置信度的最小值（0-1）
   minFrontal?: number
-  // 静默活体检测的阈值（0-100，默认 90）：用于判定是否为真实人脸
+  // 静默活体检测的阈值（0-1，默认 0.9）：用于判定是否为真实人脸
   silentLivenessThreshold?: number
   // 活体检测动作次数（默认1，表示进行几次活体动作检测）
   livenessActionCount?: number
@@ -90,6 +90,7 @@ export interface FaceInfo {
     count: number
     size: number
     frontal: number
+    liveness?: number
 }
 
 /**

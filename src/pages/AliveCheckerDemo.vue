@@ -50,28 +50,28 @@
         </div>
         <div class="info-row">
           <span class="label">人脸画面占比:</span>
-          <span class="value">{{ faceInfo.size }}%</span>
+          <span class="value">{{ (faceInfo.size * 100).toFixed(0) }}%</span>
           <span class="progress-bar">
-            <span class="progress-fill" :style="{ width: Math.min(faceInfo.size, 100) + '%' }"></span>
+            <span class="progress-fill" :style="{ width: Math.min(faceInfo.size * 100, 100) + '%' }"></span>
           </span>
         </div>
         <div class="info-row">
           <span class="label">正脸置信度:</span>
           <span class="value" :class="faceInfo.frontal >= minFrontal ? 'success' : 'warning'">
-            {{ faceInfo.frontal }}%
+            {{ (faceInfo.frontal * 100).toFixed(0) }}%
           </span>
           <span class="progress-bar">
-            <span class="progress-fill" :style="{ width: faceInfo.frontal + '%' }"></span>
+            <span class="progress-fill" :style="{ width: (faceInfo.frontal * 100) + '%' }"></span>
           </span>
         </div>
         <div v-if="isDetecting && faceInfo.frontal < minFrontal" class="hint-text">
           💡 请将脸正对摄像头
         </div>
         <div v-if="isDetecting && faceInfo.size < minFaceRatio" class="hint-text">
-          💡 请靠近摄像头（目标：{{ minFaceRatio }}%-{{ maxFaceRatio }}%）
+          💡 请靠近摄像头（目标：{{ (minFaceRatio * 100).toFixed(0) }}%-{{ (maxFaceRatio * 100).toFixed(0) }}%）
         </div>
         <div v-if="isDetecting && faceInfo.size > maxFaceRatio" class="hint-text">
-          💡 请远离摄像头（目标：{{ minFaceRatio }}%-{{ maxFaceRatio }}%）
+          💡 请远离摄像头（目标：{{ (minFaceRatio * 100).toFixed(0) }}%-{{ (maxFaceRatio * 100).toFixed(0) }}%）
         </div>
         <div v-if="isDetecting && faceInfo.size >= minFaceRatio && faceInfo.size <= maxFaceRatio && faceInfo.frontal >= minFrontal" class="hint-text success-hint">
           ✓ 完美！准备验证中...
@@ -116,9 +116,9 @@ const actionMessage: Ref<string | null> = ref(null)
 const completedActions: Ref<string[]> = ref([])
 const currentAction: Ref<string | null> = ref(null)
 const isDetecting: Ref<boolean> = ref(false)
-const minFaceRatio: Ref<number> = ref(50)
-const maxFaceRatio: Ref<number> = ref(80)
-const minFrontal: Ref<number> = ref(90)
+const minFaceRatio: Ref<number> = ref(0.5)
+const maxFaceRatio: Ref<number> = ref(0.8)
+const minFrontal: Ref<number> = ref(0.9)
 const livenessActionCount: Ref<number> = ref(1)      // 活体检测动作次数
 const livenessActionTimeout: Ref<number> = ref(60)   // 活体检测动作时间限制（秒）
 const showActionPrompt: Ref<boolean> = ref(true)     // 是否显示活体检测动作提示文本

@@ -27,10 +27,10 @@ import { DetectionMode, LivenessAction, LivenessActionStatus, ACTION_DESCRIPTION
 const props = withDefaults(defineProps<FaceDetectorProps>(), {
   mode: DetectionMode.COLLECTION,
   livenessChecks: () => [LivenessAction.BLINK, LivenessAction.MOUTH_OPEN, LivenessAction.NOD],
-  minFaceRatio: 50,
-  maxFaceRatio: 90,
-  minFrontal: 90,
-  silentLivenessThreshold: 90,  // 静默活体检测阈值 (百分比: 0-100)
+  minFaceRatio: 0.5,
+  maxFaceRatio: 0.9,
+  minFrontal: 0.9,
+  silentLivenessThreshold: 0.9,  // 静默活体检测阈值 (0-1)
   livenessActionCount: 1,        // 活体检测动作次数，默认为1
   livenessActionTimeout: 60,      // 活体检测动作时间限制，默认60秒
   showActionPrompt: true          // 是否显示活体检测动作提示文本，默认显示
@@ -625,10 +625,10 @@ async function detect(): Promise<void> {
         return
       }
       
-      // 计算人脸占视频画面的比例 (%)
-      const faceRatio = (faceBox[2] * faceBox[3]) / (videoWidth.value * videoHeight.value) * 100
+      // 计算人脸占视频画面的比例 (0-1)
+      const faceRatio = (faceBox[2] * faceBox[3]) / (videoWidth.value * videoHeight.value)
       
-      // 检查人脸是否正对摄像头 (0-100 分数)
+      // 检查人脸是否正对摄像头 (0-1 评分)
       const frontal = checkFaceFrontal(face, result.gesture)
       
       handleSingleFace(faceRatio, frontal, result.gesture)
@@ -650,17 +650,17 @@ async function detect(): Promise<void> {
  * 检查人脸是否正对摄像头
  * @param {Object} face - 人脸检测结果
  * @param {Array} gestures - 检测到的手势/表情
- * @returns {number} 正对度评分 (0-100)
+ * @returns {number} 正对度评分 (0-1)
  */
 function checkFaceFrontal(face: any, gestures: any): number {
   // 优先使用 gestures 中的 facing center 判定
   if (gestures && gestures.length > 0) {
     const isFacingCenter = gestures.some((g: any) => g.gesture?.includes('facing center'))
     
-    // 如果识别到 "facing center"，则判定为正脸，返回 100 分
+    // 如果识别到 "facing center"，则判定为正脸，返回 1.0
     if (isFacingCenter) {
       console.log('[FaceDetector] Face is frontal (from gesture: facing center)')
-      return 100
+      return 1.0
     }
     
     // 如果识别到 facing left 或 facing right，返回较低分数
@@ -669,7 +669,7 @@ function checkFaceFrontal(face: any, gestures: any): number {
     
     if (isFacingLeft || isFacingRight) {
       console.log('[FaceDetector] Face is not fully frontal (from gesture: facing', isFacingLeft ? 'left' : 'right', ')')
-      return 50 // 返回 50 分，表示偏转
+      return 0.5 // 返回 0.5，表示偏转
     }
   }
   
@@ -680,8 +680,8 @@ function checkFaceFrontal(face: any, gestures: any): number {
   // 更严格的角度阈值判定
   // 要求：yaw < 5°、pitch < 5°、roll < 3°，才能达到较高的正脸评分
   
-  // 基础评分，从 100 开始
-  let score = 100
+  // 基础评分，从 1.0 开始
+  let score = 1.0
   
   // Yaw 角度惩罚（左右摇晃）- 权重最高 (60%)
   // 目标：yaw 应该在 ±3° 以内
@@ -689,8 +689,8 @@ function checkFaceFrontal(face: any, gestures: any): number {
   const yawPenalty = Math.abs(ang.yaw) > yawThreshold 
     ? Math.abs(ang.yaw) - yawThreshold  // 超出部分作为惩罚
     : 0
-  // yaw 每超过 1° 扣 15 分
-  score -= yawPenalty * 15
+  // yaw 每超过 1° 扣 0.15
+  score -= yawPenalty * 0.15
   
   // Pitch 角度惩罚（上下俯仰）- 权重中等 (25%)
   // 目标：pitch 应该在 ±4° 以内
@@ -698,8 +698,8 @@ function checkFaceFrontal(face: any, gestures: any): number {
   const pitchPenalty = Math.abs(ang.pitch) > pitchThreshold 
     ? Math.abs(ang.pitch) - pitchThreshold
     : 0
-  // pitch 每超过 1° 扣 10 分
-  score -= pitchPenalty * 10
+  // pitch 每超过 1° 扣 0.1
+  score -= pitchPenalty * 0.1
   
   // Roll 角度惩罚（旋转）- 权重最低 (15%)
   // 目标：roll 应该在 ±2° 以内
@@ -707,11 +707,11 @@ function checkFaceFrontal(face: any, gestures: any): number {
   const rollPenalty = Math.abs(ang.roll) > rollThreshold 
     ? Math.abs(ang.roll) - rollThreshold
     : 0
-  // roll 每超过 1° 扣 12 分
-  score -= rollPenalty * 12
+  // roll 每超过 1° 扣 0.12
+  score -= rollPenalty * 0.12
   
-  // 确保评分在 0-100 之间
-  return Math.max(0, Math.min(100, score))
+  // 确保评分在 0-1 之间
+  return Math.max(0, Math.min(1, score))
 }
 
 /**
@@ -738,7 +738,7 @@ function verifyLiveness(gestures: any): void {
     // 抛出 liveness-completed 事件
     emit(FACE_DETECTOR_EVENTS.LIVENESS_COMPLETED, { 
       imageData: detectionState.baselineImage, 
-      liveness: 1.0 }
+      liveness: 100 }
     )
     stopDetection(true)
     return
@@ -1151,9 +1151,7 @@ async function performSilentLivenessDetection(): Promise<void> {
         console.log('[FaceDetector] Liveness score (real):', realScore, 'threshold:', props.silentLivenessThreshold)
 
         // 判断是否通过活体检测
-        // 将百分比阈值转换为小数进行比较
-        const thresholdDecimal = props.silentLivenessThreshold / 100
-        if (realScore >= thresholdDecimal) {
+        if (realScore >= props.silentLivenessThreshold) {
           console.log('[FaceDetector] Liveness detection PASSED')
           
           // 设置成功颜色

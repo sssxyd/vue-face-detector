@@ -52,20 +52,20 @@
         <div class="info-row">
           <span class="label">正脸置信度:</span>
           <span class="value" :class="faceInfo.frontal >= minFrontal ? 'success' : 'warning'">
-            {{ faceInfo.frontal }}%
+            {{ (faceInfo.frontal * 100).toFixed(0) }}%
           </span>
           <span class="progress-bar">
-            <span class="progress-fill" :style="{ width: faceInfo.frontal + '%' }"></span>
+            <span class="progress-fill" :style="{ width: (faceInfo.frontal * 100) + '%' }"></span>
           </span>
         </div>
         <div v-if="isDetecting && faceInfo.frontal < minFrontal" class="hint-text">
           💡 请将脸正对摄像头
         </div>
         <div v-if="isDetecting && faceInfo.size < minFaceRatio" class="hint-text">
-          💡 请靠近摄像头（目标：{{ minFaceRatio }}%-{{ maxFaceRatio }}%）
+          💡 请靠近摄像头（目标：{{ (minFaceRatio * 100).toFixed(0) }}%-{{ (maxFaceRatio * 100).toFixed(0) }}%）
         </div>
         <div v-if="isDetecting && faceInfo.size > maxFaceRatio" class="hint-text">
-          💡 请远离摄像头（目标：{{ minFaceRatio }}%-{{ maxFaceRatio }}%）
+          💡 请远离摄像头（目标：{{ (minFaceRatio * 100).toFixed(0) }}%-{{ (maxFaceRatio * 100).toFixed(0) }}%）
         </div>
         <div v-if="isDetecting && faceInfo.size >= minFaceRatio && faceInfo.size <= maxFaceRatio && faceInfo.frontal >= minFrontal" class="hint-text success-hint">
           ✓ 完美！检测中...
@@ -103,9 +103,9 @@ import FaceDetector from '../components/FaceDetector.vue'
 import { ErrorCode, FaceInfo } from '../components/face-detector'
 
 // 人脸检测参数
-const minFaceRatio: Ref<number> = ref(50)  // 最小人脸占比(%)
-const maxFaceRatio: Ref<number> = ref(80)  // 最大人脸占比(%)
-const minFrontal: Ref<number> = ref(90)    // 最小正对度(%)
+const minFaceRatio: Ref<number> = ref(0.5)  // 最小人脸占比(0-1)
+const maxFaceRatio: Ref<number> = ref(0.8)  // 最大人脸占比(0-1)
+const minFrontal: Ref<number> = ref(0.9)    // 最小正对度(0-1)
 
 const faceDetectorRef: Ref<any> = ref(null)
 const faceInfo: Ref<FaceInfo | null> = ref(null)
