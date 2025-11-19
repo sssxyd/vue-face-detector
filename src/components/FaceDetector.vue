@@ -20,7 +20,7 @@ import { ref, computed, onMounted, onUnmounted, Ref, reactive } from 'vue'
 // 导入人脸检测库
 import Human from '@vladmandic/human'
 // 导入类型定义
-import type { FaceDetectedData, FaceCollectedData, LivenessCompletedData, LivenessActionData, ErrorData, FaceDetectorProps, LivenessDetectedData } from './face-detector'
+import type { FaceDetectedData, FaceCollectedData, LivenessCompletedData, LivenessActionData, ErrorData, FaceDetectorProps, LivenessDetectedData, DebugData } from './face-detector'
 import { DetectionMode, LivenessAction, LivenessActionStatus, ACTION_DESCRIPTIONS, FACE_DETECTOR_EVENTS, BORDER_COLOR_STATES, CONFIG, ErrorCode } from './face-detector'
 
 // 定义组件 props
@@ -55,6 +55,7 @@ const emit = defineEmits<{
   'liveness-detected': [data: LivenessDetectedData]
   'liveness-completed': [data: LivenessCompletedData]
   'error': [data: ErrorData]
+  'debug': [data: DebugData]  // 调试信息事件
 }>()
 
 // 视频元素引用
@@ -115,6 +116,25 @@ const detectionState = reactive<DetectionState>({
   currentAction: null,
   baselineImage: null
 })
+
+/**
+ * 发送调试信息事件
+ * @param {string} stage - 当前阶段
+ * @param {string} message - 调试信息
+ * @param {Record<string, any>} details - 详细信息
+ * @param {'info'|'warn'|'error'} level - 调试级别
+ */
+function emitDebug(stage: string, message: string, details?: Record<string, any>, level: 'info' | 'warn' | 'error' = 'info'): void {
+  const debugData: DebugData = {
+    level,
+    stage,
+    message,
+    details,
+    timestamp: Date.now()
+  }
+  console.log(`[FaceDetector-Debug] ${stage}: ${message}`, details || '')
+  emit(FACE_DETECTOR_EVENTS.DEBUG, debugData)
+}
 
 /**
  * 调度检测循环 - 使用 requestAnimationFrame 实现高效的帧率控制
@@ -202,19 +222,75 @@ onMounted(async () => {
   
   // 合并并应用 Human 配置
   const mergedConfig = mergeHumanConfig()
+  
+  // 检查浏览器环境和能力
+  const userAgent = navigator.userAgent
+  const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent)
+  const isWeChat = /micromessenger/i.test(userAgent)
+  const isAlipay = /Alipay/.test(userAgent)
+  const isQQ = /QQ/.test(userAgent)
+  const isWebView = !(/Chrome/.test(userAgent) && /Mobile/.test(userAgent))
+  
+  emitDebug('initialization', '开始初始化 Human.js 库', {
+    userAgent: userAgent.substring(0, 100),
+    browser: { isSafari, isWeChat, isAlipay, isQQ, isWebView },
+    modelBasePath: mergedConfig.modelBasePath
+  })
+  
+  // 检查 WebGL 支持
+  const canvas = document.createElement('canvas')
+  let webglContext = null
+  let webglInfo = { available: false, vendor: '', renderer: '', version: '' }
+  try {
+    webglContext = canvas.getContext('webgl') || canvas.getContext('webgl2')
+    if (webglContext) {
+      const debugInfo = webglContext.getExtension('WEBGL_debug_renderer_info')
+      if (debugInfo) {
+        webglInfo = {
+          available: true,
+          vendor: webglContext.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+          renderer: webglContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
+          version: webglContext.getParameter(webglContext.VERSION)
+        }
+      } else {
+        webglInfo.available = true
+      }
+      emitDebug('initialization', 'WebGL 可用', webglInfo)
+    } else {
+      emitDebug('initialization', 'WebGL 不可用，将尝试 CPU 模式', { reason: 'getContext 返回 null' }, 'warn')
+    }
+  } catch (e) {
+    emitDebug('initialization', 'WebGL 检测失败', { error: (e as Error).message }, 'warn')
+  }
+  
   human = new Human(mergedConfig as any)
   try {
-    console.log('[FaceDetector] Loading Human.js library...')
-    const userAgent = navigator.userAgent
-    const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent)
-    console.log('[FaceDetector] Browser: Safari=' + isSafari + ', UserAgent=' + userAgent)
+    emitDebug('initialization', '正在加载 Human.js 库...', { config: Object.keys(mergedConfig) })
     
+    const loadStartTime = performance.now()
     await human.load()
-    console.log('[FaceDetector] Human.js library loaded successfully')
-    console.log('[FaceDetector] Available models:', human.models)
+    const loadTime = performance.now() - loadStartTime
+    
+    emitDebug('initialization', 'Human.js 库加载成功', {
+      loadTime: `${loadTime.toFixed(2)}ms`,
+      modelsAvailable: human.models ? Object.keys(human.models).length : 0,
+      modelsStatus: human.models ? Object.entries(human.models).reduce((acc, [key, model]: any) => {
+        acc[key] = {
+          enabled: model?.enabled,
+          loaded: model?.['loaded'] || model?.state,
+          type: typeof model
+        }
+        return acc
+      }, {} as Record<string, any>) : {}
+    })
   } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : '未知错误'
+    emitDebug('initialization', 'Human.js 加载失败', {
+      error: errorMsg,
+      errorStack: e instanceof Error ? e.stack : 'N/A'
+    }, 'error')
     console.error('[FaceDetector] Failed to load Human library:', e)
-    emit(FACE_DETECTOR_EVENTS.ERROR, { code: ErrorCode.ENGINE_NOT_INITIALIZED, message: '检测库加载失败: ' + (e instanceof Error ? e.message : '未知错误') })
+    emit(FACE_DETECTOR_EVENTS.ERROR, { code: ErrorCode.ENGINE_NOT_INITIALIZED, message: '检测库加载失败: ' + errorMsg })
   }
   isInitializing.value = false
 })
@@ -349,66 +425,65 @@ async function startDetection(): Promise<void> {
   try {
     // 检查 Human 库是否已初始化
     if (!human) {
+      emitDebug('video-setup', 'Human 库未初始化', {}, 'error')
       emit(FACE_DETECTOR_EVENTS.ERROR, { code: ErrorCode.DETECTOR_NOT_INITIALIZED, message: '检测库未初始化' })
       return
     }
     
-    console.log('[FaceDetector] Starting detection...')
+    emitDebug('video-setup', '开始启动检测')
     
     // 重置检测状态和画布
     resetDetectionState()
     
     // 获取用户摄像头权限和视频流
-    console.log('[FaceDetector] Requesting camera access...')
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { 
-        facingMode: 'user', 
-        // 请求 1:1 的正方形视频（宽高相同）
-        width: { ideal: videoWidth.value }, 
-        height: { ideal: videoWidth.value },  // 确保高度等于宽度
-        // 优先使用可用的分辨率
-        aspectRatio: { ideal: 1.0 }
-      },
-      audio: false
-    })
+    emitDebug('video-setup', '正在请求摄像头权限...')
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'user', 
+          width: { ideal: videoWidth.value }, 
+          height: { ideal: videoWidth.value },
+          aspectRatio: { ideal: 1.0 }
+        },
+        audio: false
+      })
+      emitDebug('video-setup', '摄像头流获取成功', { streamTracks: stream.getTracks().length })
+    } catch (err) {
+      emitDebug('video-setup', '获取摄像头权限失败', { error: (err as Error).message }, 'error')
+      throw err
+    }
     
-    console.log('[FaceDetector] Camera stream obtained')
-    
-    // 获取实际的视频流分辨率（Safari 兼容性修复）
+    // 获取实际的视频流分辨率
     const videoTrack = stream.getVideoTracks()[0]
     if (videoTrack) {
       const settings = videoTrack.getSettings?.()
       if (settings) {
-        console.log('[FaceDetector] Actual video settings:', settings.width, 'x', settings.height)
-        // 更新实际的视频尺寸为 1:1 比例
-        // 优先取较小的尺寸作为边长，保证能显示完整
+        emitDebug('video-setup', '获取视频设置成功', { width: settings.width, height: settings.height })
         const minSize = Math.min(settings.width || videoWidth.value, settings.height || videoHeight.value)
         videoWidth.value = minSize
         videoHeight.value = minSize
-        console.log('[FaceDetector] Normalized to 1:1 ratio:', minSize, 'x', minSize)
       }
     }
     
     if (videoRef.value) {
-      videoRef.value.style.display = 'block'  // 确保摄像头视频可见
+      videoRef.value.style.display = 'block'
       videoRef.value.srcObject = stream
     }
     
     // 等待视频元素加载元数据和可播放
-    console.log('[FaceDetector] Waiting for video to be ready...')
+    emitDebug('video-setup', '等待视频就绪...')
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
+        emitDebug('video-setup', '视频加载超时', { timeout: CONFIG.DETECTION.VIDEO_LOAD_TIMEOUT }, 'error')
         reject(new Error('Video loading timeout'))
       }, CONFIG.DETECTION.VIDEO_LOAD_TIMEOUT)
       
       const checkVideoReady = () => {
-        // Safari 兼容性：检查 videoWidth 和 videoHeight
-        // 某些浏览器的 canplay 事件可能不可靠，需要额外检查实际视频尺寸
         if (videoRef.value && videoRef.value.videoWidth > 0 && videoRef.value.videoHeight > 0) {
           clearTimeout(timeout)
           videoRef.value.removeEventListener('canplay', onCanPlay)
           videoRef.value.removeEventListener('loadedmetadata', onLoadedMetadata)
-          console.log('[FaceDetector] Video ready, dimensions:', videoRef.value.videoWidth, 'x', videoRef.value.videoHeight)
+          emitDebug('video-setup', '视频就绪，准备检测', { videoWidth: videoRef.value.videoWidth, videoHeight: videoRef.value.videoHeight })
           resolve()
           return true
         }
@@ -416,16 +491,16 @@ async function startDetection(): Promise<void> {
       }
       
       const onCanPlay = () => {
-        console.log('[FaceDetector] canplay event fired')
+        emitDebug('video-setup', 'canplay 事件触发')
         if (checkVideoReady()) {
-          // 事件处理已完成，不再需要做什么
+          // 事件处理已完成
         }
       }
       
       const onLoadedMetadata = () => {
-        console.log('[FaceDetector] loadedmetadata event fired')
+        emitDebug('video-setup', 'loadedmetadata 事件触发')
         if (checkVideoReady()) {
-          // 事件处理已完成，不再需要做什么
+          // 事件处理已完成
         }
       }
       
@@ -505,14 +580,16 @@ function handleSingleFace(faceRatio: number, frontal: number, gestures: any): vo
     count: 1,
     size: faceRatio, 
     frontal: frontal
-  }  // 触发 face-detected 事件
+  }
+  console.log('[FaceDetector] Emitting face-detected event with:', faceInfo)
+  // 触发 face-detected 事件
   emit(FACE_DETECTOR_EVENTS.FACE_DETECTED, faceInfo)
   // 更新边框颜色
   updateBorderColor(faceInfo)
   
   // 判断人脸是否符合条件：大小在范围内，且正对度符合要求
   if (faceRatio > props.minFaceRatio && faceRatio < props.maxFaceRatio && frontal >= props.minFrontal) {
-    console.log('[FaceDetector] Valid face detected')
+    console.log('[FaceDetector] Valid face detected - ratio:', faceRatio.toFixed(4), 'frontal:', frontal.toFixed(4), 'mode:', props.mode)
     
     // 根据检测模式处理
     if (props.mode === DetectionMode.COLLECTION) {
@@ -524,7 +601,7 @@ function handleSingleFace(faceRatio: number, frontal: number, gestures: any): vo
     }
   } else {
     // 人脸不符合条件，继续检测
-    console.log('[FaceDetector] Face not valid, ratio:', faceRatio, 'frontal:', frontal)
+    console.log('[FaceDetector] Face not valid, ratio:', faceRatio.toFixed(4), 'frontal:', frontal.toFixed(4), 'minFaceRatio:', props.minFaceRatio, 'maxFaceRatio:', props.maxFaceRatio, 'minFrontal:', props.minFrontal)
     scheduleNextDetection()
   }
 }
@@ -625,14 +702,14 @@ async function detect(): Promise<void> {
   try {
     // 快速检查必需的对象
     if (!videoRef.value || !human) {
-      console.warn('[FaceDetector] Missing required objects, retrying...')
+      console.warn('[FaceDetector] Missing required objects, retrying...', { hasVideoRef: !!videoRef.value, hasHuman: !!human })
       scheduleNextDetection(CONFIG.DETECTION.DETECTION_FRAME_DELAY)
       return
     }
     
     // Safari 兼容性检查：确保视频已加载且可绘制
     if (videoRef.value.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      console.warn('[FaceDetector] Video not ready, readyState:', videoRef.value.readyState)
+      console.warn('[FaceDetector] Video not ready, readyState:', videoRef.value.readyState, 'videoWidth:', videoRef.value.videoWidth, 'videoHeight:', videoRef.value.videoHeight)
       scheduleNextDetection(CONFIG.DETECTION.ERROR_RETRY_DELAY)
       return
     }
@@ -653,10 +730,41 @@ async function detect(): Promise<void> {
     // 对当前视频帧进行人脸检测
     // 如果用户提供了运行时配置，则使用；否则使用实例初始化时的配置
     const runtimeConfig = Object.keys(props.humanConfig).length > 0 ? props.humanConfig : undefined
-    const result = await human.detect(videoRef.value, runtimeConfig)
     
-    // 获取检测到的所有人脸
-    const faces = result.face || []
+    let result
+    try {
+      result = await human.detect(videoRef.value, runtimeConfig)
+    } catch (detectError) {
+      emitDebug('detection', '检测过程出错', { error: (detectError as Error).message }, 'error')
+      throw detectError
+    }
+    
+    // 调试日志：打印 detect 结果结构
+    if (!result) {
+      emitDebug('detection', '检测返回 null/undefined', {}, 'warn')
+      scheduleNextDetection(CONFIG.DETECTION.DETECTION_FRAME_DELAY)
+      return
+    }
+    
+    // 获取检测到的所有人脸 - 尝试多种属性名（兼容不同版本的 Human.js）
+    let faces = result.face || []
+    
+    // 如果 face 属性为空，尝试其他可能的属性名
+    if (!faces || faces.length === 0) {
+      faces = (result as any).faces || (result as any).detections || []
+      if (faces.length > 0) {
+        emitDebug('detection', '使用备选属性名获取人脸数据', { propertyUsed: 'faces/detections' }, 'info')
+      }
+    }
+    
+    // 每 30 帧记录一次检测结果
+    if (detectionStartTime % 3000 < 100) {  // 大约每 3 秒记录一次
+      emitDebug('detection', '检测结果', { 
+        facesCount: faces.length, 
+        resultKeys: Object.keys(result).slice(0, 5),
+        hasGesture: !!result.gesture
+      })
+    }
     
     if (faces.length === 1) {
       // 处理单人脸的情况
@@ -664,6 +772,7 @@ async function detect(): Promise<void> {
       const faceBox = face.box || face.boxRaw
       
       if (!faceBox) {
+        console.warn('[FaceDetector] Face detected but no box/boxRaw property:', Object.keys(face).slice(0, 10))
         scheduleNextDetection(CONFIG.DETECTION.DETECTION_FRAME_DELAY)
         return
       }
@@ -674,13 +783,16 @@ async function detect(): Promise<void> {
       // 检查人脸是否正对摄像头 (0-1 评分)
       const frontal = checkFaceFrontal(face, result.gesture)
       
+      console.log('[FaceDetector] Single face detected - ratio:', faceRatio.toFixed(4), 'frontal:', frontal.toFixed(4))
+      
       handleSingleFace(faceRatio, frontal, result.gesture)
     } else {
       // 处理多人脸或无人脸的情况
+      console.log('[FaceDetector] handleMultipleFaces with count:', faces.length)
       handleMultipleFaces(faces.length)
     }
   } catch (error) {
-    console.error('[FaceDetector] Detection error:', error)
+    console.error('[FaceDetector] Detection error:', error, 'error stack:', (error as Error).stack)
     // 发生错误时继续检测，但增加重试延迟
     scheduleNextDetection(CONFIG.DETECTION.ERROR_RETRY_DELAY)
   }

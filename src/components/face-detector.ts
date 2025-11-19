@@ -44,7 +44,8 @@ export const FACE_DETECTOR_EVENTS = Object.freeze({
   LIVENESS_ACTION: 'liveness-action',
   LIVENESS_DETECTED: 'liveness-detected',
   LIVENESS_COMPLETED: 'liveness-completed',
-  ERROR: 'error'
+  ERROR: 'error',
+  DEBUG: 'debug'  // 调试事件 - 用于输出详细的诊断信息
 })
 
 /**
@@ -200,6 +201,39 @@ export const ERROR_CODE_DESCRIPTIONS: Record<ErrorCode, string> = {
 export interface ErrorData {
   code: ErrorCode
   message: string
+}
+
+/**
+ * 调试信息数据
+ */
+export interface DebugData {
+  level: 'info' | 'warn' | 'error'  // 调试级别
+  stage: string                      // 当前阶段 (initialization, video-setup, human-loading, detection 等)
+  message: string                    // 主要信息
+  details?: Record<string, any>      // 详细信息
+  timestamp: number                  // 时间戳
+}
+
+/**
+ * Human.js 加载状态
+ */
+export interface HumanLoadingStatus {
+  loaded: boolean
+  modelsLoaded: boolean
+  modelsStatus: Record<string, any>
+  backend: string
+  error?: string
+}
+
+/**
+ * WebGL 状态
+ */
+export interface WebGLStatus {
+  available: boolean
+  vendor?: string
+  renderer?: string
+  version?: string
+  error?: string
 }
 
 export const CONFIG = Object.freeze({
