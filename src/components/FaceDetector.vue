@@ -49,6 +49,7 @@ const normalizedLivenessActionCount = computed(() => {
 
 // 定义组件事件
 const emit = defineEmits<{
+  'ready': []
   'face-detected': [data: FaceDetectedData]
   'face-collected': [data: FaceCollectedData]
   'liveness-action': [data: LivenessActionData]
@@ -68,6 +69,8 @@ const resultImageSrc: Ref<string> = ref('')
 const isMobileDevice: Ref<boolean> = ref(false)
 // 是否正在进行检测
 const isDetecting: Ref<boolean> = ref(false)
+// 组件是否已就绪（Human.js 加载完成）
+const isReady: Ref<boolean> = ref(false)
 
 // 缓存的临时 canvas 对象（用于画面捕获）
 let captureCanvas: HTMLCanvasElement | null = null
@@ -282,6 +285,11 @@ onMounted(async () => {
         return acc
       }, {} as Record<string, any>) : {}
     })
+    
+    // 标记组件已就绪，发送 ready 事件
+    isReady.value = true
+    emit(FACE_DETECTOR_EVENTS.READY)
+    emitDebug('initialization', '组件已就绪', {})
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : '未知错误'
     emitDebug('initialization', 'Human.js 加载失败', {
@@ -421,6 +429,12 @@ function resetDetectionState(): void {
  * 启动人脸检测
  */
 async function startDetection(): Promise<void> {
+  // 检查组件是否已就绪
+  if (!isReady.value) {
+    emitDebug('detection', '组件未就绪', { ready: isReady.value, reason: 'Human.js 库仍在加载中，请稍候...' }, 'warn')
+    return
+  }
+
   try {
     // 检查 Human 库是否已初始化
     if (!human) {

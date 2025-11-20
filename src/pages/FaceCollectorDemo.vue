@@ -9,9 +9,10 @@
       <button 
         v-if="!isDetecting" 
         @click="startDetection"
+        :disabled="!isComponentReady"
         class="btn-primary"
       >
-        开始采集
+        {{ isComponentReady ? '开始采集' : '加载中...' }}
       </button>
       <button 
         v-else 
@@ -28,6 +29,7 @@
       :min-face-ratio="minFaceRatio"
       :max-face-ratio="maxFaceRatio"
       :min-frontal="minFrontal"
+      @ready="handleComponentReady"
       @face-detected="handleFaceDetected"
       @face-collected="handleFaceCollected"
       @error="handleError"
@@ -145,6 +147,7 @@ const faceInfo: Ref<FaceDetectedData | null> = ref(null)
 const collectedImage: Ref<string | null> = ref(null)
 const errorMessage: Ref<string | null> = ref(null)
 const isDetecting: Ref<boolean> = ref(false)
+const isComponentReady: Ref<boolean> = ref(false)  // 组件是否就绪（Human.js 加载完成）
 
 // Debug 相关数据
 const debugLogs: Ref<DebugData[]> = ref([])
@@ -153,6 +156,11 @@ const maxDebugLogs: number = 50  // 最多保存 50 条日志
 
 function handleFaceDetected(data: FaceDetectedData): void {
   faceInfo.value = data
+}
+
+function handleComponentReady(): void {
+  isComponentReady.value = true
+  console.log('FaceDetector 组件已就绪')
 }
 
 function handleFaceCollected(data: FaceCollectedData): void {

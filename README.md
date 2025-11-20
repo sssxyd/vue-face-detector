@@ -570,6 +570,183 @@ interface LivenessDetectedData {
 
 ---
 
+## 组件初始化与 READY 事件
+
+FaceDetector 组件在 Human.js 库完全加载后会发送 `ready` 事件。建议在组件就绪后再启动检测，以确保最佳的用户体验。
+
+### READY 事件
+
+`ready` 事件在以下时机触发：
+- Human.js 库加载完成
+- 所有必要的模型已初始化
+- 组件已完全就绪，可以安全启动检测
+
+**事件使用：**
+```typescript
+// ready 事件：组件已初始化完成
+@ready="() => {
+  console.log('✓ FaceDetector 组件已就绪，可以开始检测')
+  isComponentReady = true
+}"
+```
+
+**推荐用法：**
+```vue
+<template>
+  <div>
+    <!-- 加载状态提示 -->
+    <div v-if="!isComponentReady" class="loading">
+      <p>🔄 正在初始化人脸检测系统...</p>
+    </div>
+    
+    <!-- 就绪状态 -->
+    <div v-else class="ready">
+      <p>✓ 系统已就绪</p>
+      <button @click="startDetection" class="btn-primary">
+        开始检测
+      </button>
+    </div>
+
+    <!-- 人脸检测器 -->
+    <FaceDetector
+      mode="collection"
+      @ready="handleReady"
+      @face-detected="handleFaceDetected"
+      @face-collected="handleFaceCollected"
+      @error="handleError"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import FaceDetector from './components/FaceDetector.vue'
+
+const isComponentReady = ref(false)
+
+const handleReady = () => {
+  isComponentReady.value = true
+  console.log('✓ FaceDetector 组件已就绪')
+}
+
+const startDetection = async () => {
+  // 由于组件已就绪，可以安全地启动检测
+  console.log('开始检测...')
+}
+
+const handleFaceDetected = (data) => {
+  console.log('检测到人脸:', data)
+}
+
+const handleFaceCollected = (data) => {
+  console.log('采集成功:', data.imageData?.length)
+}
+
+const handleError = (error) => {
+  console.error('检测出错:', error.message)
+}
+</script>
+
+<style scoped>
+.loading {
+  padding: 20px;
+  background: #f0f8ff;
+  border: 1px solid #87ceeb;
+  border-radius: 8px;
+  text-align: center;
+  color: #0066cc;
+}
+
+.ready {
+  padding: 20px;
+  background: #f0fff0;
+  border: 1px solid #90ee90;
+  border-radius: 8px;
+  text-align: center;
+  color: #006600;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.btn-primary:hover {
+  background: #0052a3;
+}
+</style>
+```
+
+### 按钮禁用示例
+
+在组件就绪前禁用开始按钮是最佳实践：
+
+```vue
+<template>
+  <button @click="startDetection" :disabled="!isComponentReady">
+    {{ isComponentReady ? '开始检测' : '加载中...' }}
+  </button>
+  <FaceDetector @ready="() => isComponentReady = true" />
+</template>
+
+<script setup>
+import { ref } from 'vue'
+const isComponentReady = ref(false)
+</script>
+
+<style scoped>
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+</style>
+```
+
+### 监听初始化日志
+
+通过 `debug` 事件可以看到完整的初始化过程：
+
+```vue
+<FaceDetector
+  @ready="handleReady"
+  @debug="(debug) => {
+    if (debug.stage === 'initialization') {
+      console.log(`[初始化] ${debug.message}`, debug.details)
+    }
+  }"
+/>
+```
+
+### 完整的事件列表
+
+| 事件 | 触发时机 | 用途 |
+|------|--------|------|
+| **ready** | Human.js 加载完成 | 标记组件初始化完成 |
+| **face-detected** | 检测到人脸 | 实时人脸信息反馈 |
+| **face-collected** | 采集成功 | 获取采集的图片数据 |
+| **liveness-action** | 动作检测状态变化 | 活体动作进度反馈 |
+| **liveness-completed** | 活体检测成功 | 获取活体检测结果 |
+| **debug** | 内部阶段变化 | 诊断和调试 |
+| **error** | 出现错误 | 处理错误情况 |
+
+### 常见问题
+
+**Q: 为什么需要等待 ready 事件？**
+A: Human.js 库需要加载多个 AI 模型（通常 2-5 秒）。等待 ready 事件可以确保系统完全就绪，避免在初始化过程中出现错误。
+
+**Q: 如果在 ready 前调用 startDetection 会怎样？**
+A: 组件会通过 debug 事件发送警告，并取消检测启动。这是安全的保护机制。
+
+**Q: ready 事件会发送多次吗？**
+A: 不会。ready 事件只在组件初始化完成时发送一次。
+
+---
+
 ## 调试与日志
 
 组件提供详细的调试信息事件：

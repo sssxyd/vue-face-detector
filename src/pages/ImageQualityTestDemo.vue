@@ -59,8 +59,8 @@
       
       <!-- 控制按钮 -->
       <div class="action-buttons">
-        <button @click="startDetection" class="btn btn-primary">
-          {{ isDetecting ? '正在检测...' : '开始检测' }}
+        <button @click="startDetection" :disabled="!isComponentReady" class="btn btn-primary">
+          {{ isComponentReady ? (isDetecting ? '正在检测...' : '开始检测') : '加载中...' }}
         </button>
         <button @click="stopDetection" class="btn btn-secondary" :disabled="!isDetecting">
           停止检测
@@ -79,6 +79,7 @@
         :min-frontal="0.9"
         :silent-liveness-threshold="0.85"
         :show-action-prompt="true"
+        @ready="handleComponentReady"
         @face-detected="handleFaceDetected"
         @face-collected="handleFaceCollected"
         @liveness-detected="handleLivenessDetected"
@@ -167,6 +168,7 @@ import { DetectionMode, LivenessAction } from '../components/face-detector'
 
 const faceDetectorRef = ref()
 const isDetecting = ref(false)
+const isComponentReady = ref(false)  // 组件是否就绪（Human.js 加载完成）
 const detectionMode = ref(DetectionMode.COLLECTION)
 
 // 质量检测阈值
@@ -194,6 +196,12 @@ const qualityLogs = ref<Array<{ level: string; timestamp: number; message: strin
 // 采集的图片
 const collectedImage = ref('')
 const lastDetectionStats = ref<any>(null)
+
+// 处理组件就绪
+const handleComponentReady = () => {
+  isComponentReady.value = true
+  console.log('FaceDetector 组件已就绪')
+}
 
 // 处理事件方法
 const handleFaceDetected = (data: any) => {

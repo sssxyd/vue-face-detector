@@ -9,9 +9,10 @@
       <button 
         v-if="!isDetecting" 
         @click="startDetection"
+        :disabled="!isComponentReady"
         class="btn-primary"
       >
-        开始验证
+        {{ isComponentReady ? '开始验证' : '加载中...' }}
       </button>
       <button 
         v-else 
@@ -32,6 +33,7 @@
       :liveness-action-count="livenessActionCount"
       :liveness-action-timeout="livenessActionTimeout"
       :show-action-prompt="showActionPrompt"
+      @ready="handleComponentReady"
       @face-detected="handleFaceDetected"
       @liveness-action="handleLivenessAction"
       @liveness-completed="handleLivenessCompleted"
@@ -122,6 +124,12 @@ const minFrontal: Ref<number> = ref(0.9)
 const livenessActionCount: Ref<number> = ref(1)      // 活体检测动作次数
 const livenessActionTimeout: Ref<number> = ref(60)   // 活体检测动作时间限制（秒）
 const showActionPrompt: Ref<boolean> = ref(true)     // 是否显示活体检测动作提示文本
+const isComponentReady: Ref<boolean> = ref(false)    // 组件是否就绪（Human.js 加载完成）
+
+function handleComponentReady(): void {
+  isComponentReady.value = true
+  console.log('FaceDetector 组件已就绪')
+}
 
 function handleFaceDetected(data: FaceDetectedData): void {
   faceInfo.value = data

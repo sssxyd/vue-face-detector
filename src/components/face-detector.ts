@@ -39,12 +39,13 @@ export const ACTION_DESCRIPTIONS: Record<string, string> = {
  * FaceDetector 组件事件名称常量
  */
 export const FACE_DETECTOR_EVENTS = Object.freeze({
-  FACE_DETECTED: 'face-detected',
-  FACE_COLLECTED: 'face-collected',
-  LIVENESS_ACTION: 'liveness-action',
-  LIVENESS_DETECTED: 'liveness-detected',
-  LIVENESS_COMPLETED: 'liveness-completed',
-  ERROR: 'error',
+  READY: 'ready',           // Human.js 加载成功，组件已就绪
+  FACE_DETECTED: 'face-detected',   // 检测到人脸
+  FACE_COLLECTED: 'face-collected', // 人脸采集完成
+  LIVENESS_ACTION: 'liveness-action',    // 活体动作事件
+  LIVENESS_DETECTED: 'liveness-detected', // 一次静默活体检测完成(未必通过)
+  LIVENESS_COMPLETED: 'liveness-completed', // 动作/静默活体检测完成
+  ERROR: 'error', // 错误事件
   DEBUG: 'debug'  // 调试事件 - 用于输出详细的诊断信息
 })
 

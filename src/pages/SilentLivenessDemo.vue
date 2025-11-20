@@ -9,9 +9,10 @@
       <button 
         v-if="!isDetecting" 
         @click="startDetection"
+        :disabled="!isComponentReady"
         class="btn-primary"
       >
-        开始检测
+        {{ isComponentReady ? '开始检测' : '加载中...' }}
       </button>
       <button 
         v-else 
@@ -29,6 +30,7 @@
       :max-face-ratio="maxFaceRatio"
       :min-frontal="minFrontal"
       :silent-liveness-threshold="0.85"
+      @ready="handleComponentReady"
       @face-detected="handleFaceDetected"
       @liveness-completed="handleLivenessCompleted"
       @liveness-detected="handleLivenessDetected"
@@ -127,6 +129,12 @@ const errorCode: Ref<ErrorCode | null> = ref(null)
 const errorMessage: Ref<string | null> = ref(null)
 const livenessScore: Ref<number | null> = ref(null)
 const isDetecting: Ref<boolean> = ref(false)
+const isComponentReady: Ref<boolean> = ref(false)  // 组件是否就绪（Human.js 加载完成）
+
+function handleComponentReady(): void {
+  isComponentReady.value = true
+  console.log('FaceDetector 组件已就绪')
+}
 
 function handleFaceDetected(data: FaceDetectedData): void {
   faceInfo.value = data
