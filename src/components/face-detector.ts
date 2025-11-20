@@ -40,6 +40,7 @@ export const ACTION_DESCRIPTIONS: Record<string, string> = {
  */
 export const FACE_DETECTOR_EVENTS = Object.freeze({
   READY: 'ready',           // Human.js 加载成功，组件已就绪
+  STATUS_PROMPT: 'status-prompt', // 状态提示更新
   FACE_DETECTED: 'face-detected',   // 检测到人脸
   FACE_COLLECTED: 'face-collected', // 人脸采集完成
   LIVENESS_ACTION: 'liveness-action',    // 活体动作事件
@@ -87,6 +88,18 @@ export interface FaceDetectorProps {
   // Human.js 自定义配置（可选）：允许用户自定义模型路径、启用/禁用各个模块等
   // 详见 Human.js Config 接口：https://github.com/vladmandic/human/blob/main/src/config.ts
   humanConfig?: Record<string, any>
+}
+
+export interface StatusPromptData {
+    code: PromptCode    // 提示码
+    message: string     // 提示信息
+    count?: number      // 人脸数量
+    size?: number       // 人脸大小百分比
+    frontal?: number    // 人脸正脸度百分比
+    real?: number       // 反欺骗得分
+    live?: number       // 活体检测得分
+    quality?: number    // 图像质量得分
+    action?: LivenessAction // 活体动作
 }
 
 /**
@@ -139,6 +152,26 @@ export enum LivenessActionStatus {
   TIMEOUT = 'timeout'
 }
 
+export enum PromptCode {
+  NO_FACE_DETECTED = 'NO_FACE_DETECTED',
+  MULTIPLE_FACES_DETECTED = 'MULTIPLE_FACES_DETECTED',
+  FACE_TOO_SMALL = 'FACE_TOO_SMALL',
+  FACE_TOO_LARGE = 'FACE_TOO_LARGE',
+  FACE_NOT_FRONTAL = 'FACE_NOT_FRONTAL',
+  POOR_IMAGE_QUALITY = 'POOR_IMAGE_QUALITY',
+  PLEASE_PERFORM_ACTION = 'PLEASE_PERFORM_ACTION',
+}
+
+export const PROMPT_CODE_DESCRIPTIONS: Record<PromptCode, string> = {
+  [PromptCode.NO_FACE_DETECTED]: '未检测到人脸，请将脸部置于框内',
+  [PromptCode.MULTIPLE_FACES_DETECTED]: '检测到多个人脸，请确保画面中只有一张人脸',
+  [PromptCode.FACE_TOO_SMALL]: '人脸过小，请靠近摄像头',
+  [PromptCode.FACE_TOO_LARGE]: '人脸过大，请远离摄像头',
+  [PromptCode.FACE_NOT_FRONTAL]: '请正对摄像头，保持头部平稳',
+  [PromptCode.POOR_IMAGE_QUALITY]: '图像质量较差，请调整光线或摄像头位置',
+  [PromptCode.PLEASE_PERFORM_ACTION]: '请完成指定动作',
+}
+
 /**
  * 错误码枚举
  */
@@ -165,8 +198,6 @@ export enum ErrorCode {
   NO_LIVENESS_RESULT = 'NO_LIVENESS_RESULT',
   // 活体检测失败
   LIVENESS_DETECTION_FAILED = 'LIVENESS_DETECTION_FAILED',
-  // 活体检测得分不足
-  LIVENESS_SCORE_INSUFFICIENT = 'LIVENESS_SCORE_INSUFFICIENT',
   // 欺诈检测：检测到非真实人脸
   FRAUD_DETECTED = 'FRAUD_DETECTED',
   // 图片加载失败
@@ -190,8 +221,7 @@ export const ERROR_CODE_DESCRIPTIONS: Record<ErrorCode, string> = {
   [ErrorCode.NO_FACE_IN_IMAGE]: '采集图片中未检测到人脸',
   [ErrorCode.NO_LIVENESS_RESULT]: '无法获取活体检测结果',
   [ErrorCode.LIVENESS_DETECTION_FAILED]: '活体检测失败',
-  [ErrorCode.LIVENESS_SCORE_INSUFFICIENT]: '活体检测得分不足',
-  [ErrorCode.FRAUD_DETECTED]: '欺诈检测：检测到非真实人脸，请使用真实人脸重试',
+  [ErrorCode.FRAUD_DETECTED]: '疑似非真实人脸',
   [ErrorCode.IMAGE_LOAD_FAILED]: '图片加载失败',
   [ErrorCode.DETECTION_ERROR]: '检测异常'
 }
