@@ -32,12 +32,12 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const REMOTE_HOST = process.env.REMOTE_HOST || '146.190.162.140';
+const REMOTE_HOST = process.env.REMOTE_HOST;
 const REMOTE_PORT = parseInt(process.env.REMOTE_PORT || '22', 10);
 const REMOTE_USER = process.env.REMOTE_USER || 'root';
 const REMOTE_PASSWORD = process.env.REMOTE_PASSWORD || null;
 const REMOTE_PRIVATE_KEY = process.env.REMOTE_PRIVATE_KEY || path.join(os.homedir(), '.ssh', 'id_rsa');
-const REMOTE_PATH = process.env.REMOTE_PATH || '/home/js-face-detector';
+const REMOTE_PATH = process.env.REMOTE_PATH || '/var/www/html';
 const LOCAL_DIST = path.join(__dirname, 'dist');
 
 // 需要强制覆盖的文件列表（相对于 dist 目录的路径）
