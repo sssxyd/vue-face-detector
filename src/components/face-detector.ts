@@ -85,6 +85,8 @@ export interface FaceDetectorProps {
   livenessActionTimeout?: number
   // 是否显示活体检测动作提示文本（默认 true）
   showActionPrompt?: boolean
+  // 是否显示状态提示文本（默认 true）
+  showStatusPrompt?: boolean
   // Human.js 自定义配置（可选）：允许用户自定义模型路径、启用/禁用各个模块等
   // 详见 Human.js Config 接口：https://github.com/vladmandic/human/blob/main/src/config.ts
   humanConfig?: Record<string, any>
@@ -250,6 +252,18 @@ export interface DebugData {
 }
 
 /**
+ * 浏览器信息接口
+ */
+export interface BrowserInfo {
+  isSafari: boolean
+  isWeChat: boolean
+  isAlipay: boolean
+  isQQ: boolean
+  isWebView: boolean
+  isMobile: boolean
+}
+
+/**
  * Human.js 加载状态
  */
 export interface HumanLoadingStatus {
@@ -326,3 +340,76 @@ export const CONFIG = Object.freeze({
     DETECTION_TIMEOUT: 60000
   }
 })
+
+// ===== 工具函数 =====
+
+/**
+ * 检测浏览器信息
+ * @returns {BrowserInfo} 浏览器信息对象
+ */
+export function detectBrowserInfo(): BrowserInfo {
+  const userAgent = navigator.userAgent.toLowerCase()
+  
+  return {
+    isSafari: /safari/.test(userAgent) && !/chrome/.test(userAgent),
+    isWeChat: /micromessenger/i.test(userAgent),
+    isAlipay: /alipay/.test(userAgent),
+    isQQ: /qq/.test(userAgent),
+    isWebView: /(wechat|alipay|qq)webview/i.test(userAgent),
+    isMobile: /android|iphone|ipad|ipod/.test(userAgent) || window.innerWidth < CONFIG.MOBILE.WIDTH_THRESHOLD
+  }
+}
+
+/**
+ * 检查 WebGL 是否可用（缓存结果以避免重复检测）
+ */
+let webglAvailableCache: boolean | null = null
+
+export function isWebGLAvailable(): boolean {
+  // 如果已经检测过，直接返回缓存结果
+  if (webglAvailableCache !== null) {
+    return webglAvailableCache
+  }
+
+  try {
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('webgl') || canvas.getContext('webgl2')
+    webglAvailableCache = !!context
+    return webglAvailableCache
+  } catch (e) {
+    webglAvailableCache = false
+    return false
+  }
+}
+
+/**
+ * 获取 WebGL 详细信息
+ */
+export function getWebGLInfo(): WebGLStatus {
+  if (!isWebGLAvailable()) {
+    return { available: false }
+  }
+
+  try {
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('webgl') || canvas.getContext('webgl2')
+    
+    if (!context) {
+      return { available: false }
+    }
+
+    const debugInfo = context.getExtension('WEBGL_debug_renderer_info')
+    if (debugInfo) {
+      return {
+        available: true,
+        vendor: context.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+        renderer: context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
+        version: context.getParameter(context.VERSION)
+      }
+    }
+
+    return { available: true }
+  } catch (e) {
+    return { available: false }
+  }
+}

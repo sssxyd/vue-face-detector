@@ -8,8 +8,10 @@
       <video ref="videoRef" autoplay playsinline muted :width="videoWidth" :height="videoHeight"></video>
       <!-- 结果图片：用于显示结果图片 -->
       <img  ref="resultImageRef" :src="resultImageSrc" class="result-image"/>      
-      <!-- 活体检测提示文本 -->
+      <!-- 动作提示文本 -->
       <div v-if="actionPromptText && props.showActionPrompt" class="action-prompt">{{ actionPromptText }}</div>
+      <!-- 状态提示文本 -->
+      <div v-if="statusPromptText && props.showStatusPrompt" class="status-prompt">{{ statusPromptText }}</div>
     </div>
   </div>
 </template>
@@ -21,7 +23,7 @@ import { ref, computed, onMounted, onUnmounted, Ref, reactive } from 'vue'
 import Human from '@vladmandic/human'
 // 导入类型定义
 import type { FaceCollectedData, LivenessCompletedData, ErrorData, FaceDetectorProps, LivenessDetectedData, DebugData, StatusPromptData } from './face-detector'
-import { DetectionMode, LivenessAction, FACE_DETECTOR_EVENTS, BORDER_COLOR_STATES, CONFIG, ErrorCode, PromptCode, PROMPT_CODE_DESCRIPTIONS, ACTION_DESCRIPTIONS } from './face-detector'
+import { DetectionMode, LivenessAction, FACE_DETECTOR_EVENTS, BORDER_COLOR_STATES, CONFIG, ErrorCode, PromptCode, PROMPT_CODE_DESCRIPTIONS, ACTION_DESCRIPTIONS, detectBrowserInfo, isWebGLAvailable, getWebGLInfo } from './face-detector'
 
 // 定义组件 props
 const props = withDefaults(defineProps<FaceDetectorProps>(), {
@@ -34,6 +36,7 @@ const props = withDefaults(defineProps<FaceDetectorProps>(), {
   livenessActionCount: 1,        // 活体检测动作次数，默认为1
   livenessActionTimeout: 60,      // 活体检测动作时间限制，默认60秒
   showActionPrompt: true,         // 是否显示活体检测动作提示文本，默认显示
+  showStatusPrompt: true,         // 是否显示状态提示文本，默认显示
   humanConfig: () => ({
     // 运行时配置默认为空对象
     // 用户可传入此参数来在检测时覆盖初始化配置
@@ -94,6 +97,8 @@ let lastDetectionTime: number = 0
 let actionTimeoutId: ReturnType<typeof setTimeout> | null = null
 // 提示文本自动清空定时器
 let promptTextClearTimeoutId: ReturnType<typeof setTimeout> | null = null
+// 状态文本自动清空定时器
+let statusPromptTextClearTimeoutId: ReturnType<typeof setTimeout> | null = null
 
 // ===== 检测超时相关变量 =====
 let detectionStartTime: number = 0
@@ -140,55 +145,60 @@ function emitDebug(stage: string, message: string, details?: Record<string, any>
 }
 
 /**
+ * 更新动作/提示文本
+ * @param code 
+ */
+function updatePromptTexts(code: PromptCode): void {
+  switch(code) {
+    case PromptCode.NORMAL_STATE:
+    case PromptCode.GOOD_IMAGE_QUALITY:
+      // 正常状态：清空 statusPromptText
+      statusPromptText.value = ''
+      if(statusPromptTextClearTimeoutId){
+        clearTimeout(statusPromptTextClearTimeoutId)
+        statusPromptTextClearTimeoutId = null
+      }
+      break
+    case PromptCode.PLEASE_PERFORM_ACTION:
+      // 动作提示：更新 actionPromptText
+      actionPromptText.value = `请${getActionDescription(detectionState.currentAction || '')}`
+      if(promptTextClearTimeoutId){
+        clearTimeout(promptTextClearTimeoutId)
+      }
+      if(actionPromptText.value != ''){
+        promptTextClearTimeoutId = setTimeout(() => {
+          actionPromptText.value = ''
+          promptTextClearTimeoutId = null
+        }, CONFIG.DETECTION.PROMPT_TEXT_DURATION)
+      }
+      break
+    default:
+      // 其他提示：更新 statusPromptText
+      statusPromptText.value = PROMPT_CODE_DESCRIPTIONS[code] || ''
+      if(statusPromptTextClearTimeoutId){
+        clearTimeout(statusPromptTextClearTimeoutId)
+      }
+      if(statusPromptText.value != ''){
+        statusPromptTextClearTimeoutId = setTimeout(() => {
+          statusPromptText.value = ''
+          statusPromptTextClearTimeoutId = null
+        }, CONFIG.DETECTION.PROMPT_TEXT_DURATION)
+      }
+      break
+  }
+}
+
+/**
  * 发送状态提示事件
  * @param {PromptCode} code - 提示码
  * @param {Record<string, any>} data - 提示数据（count, size, frontal 等）
  */
 function emitStatusPrompt(code: PromptCode, data?: Record<string, any>): void {
-  let promptText = ""
-  let message = PROMPT_CODE_DESCRIPTIONS[code] || ''
-  
-  if (code != PromptCode.NORMAL_STATE){
-    if (code == PromptCode.PLEASE_PERFORM_ACTION) {
-      promptText = `请${getActionDescription(detectionState.currentAction || '')}`
-      message = PROMPT_CODE_DESCRIPTIONS[code] || ''
-      if(message === ''){
-        message = promptText
-      }
-      else{
-        message += ": " + getActionDescription(detectionState.currentAction || '')
-      }
-    } else {
-      promptText = PROMPT_CODE_DESCRIPTIONS[code] || ''
-    }
-  } else {
-    message = PROMPT_CODE_DESCRIPTIONS[code] || ''
-  }
-
-  actionPromptText.value = promptText
-
-  // 如果提示文本不为空，设置自动清空定时器
-  if (promptText) {
-    // 清除之前的定时器
-    if (promptTextClearTimeoutId) {
-      clearTimeout(promptTextClearTimeoutId)
-    }
-    // 设置新的自动清空定时器
-    promptTextClearTimeoutId = setTimeout(() => {
-      actionPromptText.value = ''
-      promptTextClearTimeoutId = null
-    }, CONFIG.DETECTION.PROMPT_TEXT_DURATION)
-  } else {
-    // 如果提示文本为空，清除定时器
-    if (promptTextClearTimeoutId) {
-      clearTimeout(promptTextClearTimeoutId)
-      promptTextClearTimeoutId = null
-    }
-  }
+  updatePromptTexts(code)
 
   const promptData: StatusPromptData = {
     code,
-    message,
+    message: PROMPT_CODE_DESCRIPTIONS[code] || '',
     ...data
   }
   emit(FACE_DETECTOR_EVENTS.STATUS_PROMPT, promptData)
@@ -215,11 +225,27 @@ function scheduleDetection(minDelayMs: number = CONFIG.DETECTION.DETECTION_FRAME
       detect()
     })
   } else {
-    // 否则等待后续调度，直到满足时间条件
-    const remainingDelay = minDelayMs - timeSinceLastDetection
-    setTimeout(() => {
-      scheduleDetection(minDelayMs)
-    }, remainingDelay)
+    // 否则安排在合适的时间运行
+    detectionFrameId = requestAnimationFrame(scheduleDetectionCallback)
+  }
+}
+
+/**
+ * requestAnimationFrame 的回调函数 - 持续监听是否该执行检测
+ */
+function scheduleDetectionCallback(): void {
+  const currentTime = performance.now()
+  const timeSinceLastDetection = currentTime - lastDetectionTime
+  const minDelayMs = CONFIG.DETECTION.DETECTION_FRAME_DELAY
+  
+  if (timeSinceLastDetection >= minDelayMs) {
+    // 时间到了，执行检测
+    lastDetectionTime = currentTime
+    detectionFrameId = null
+    detect()
+  } else {
+    // 时间未到，继续监听
+    detectionFrameId = requestAnimationFrame(scheduleDetectionCallback)
   }
 }
 
@@ -229,6 +255,24 @@ function scheduleDetection(minDelayMs: number = CONFIG.DETECTION.DETECTION_FRAME
 function scheduleNextDetection(delayMs: number = CONFIG.DETECTION.DETECTION_FRAME_DELAY): void {
   if (!isDetecting.value) return
   scheduleDetection(delayMs)
+}
+
+/**
+ * 清理所有定时器
+ */
+function clearAllTimers(): void {
+  if (actionTimeoutId) {
+    clearTimeout(actionTimeoutId)
+    actionTimeoutId = null
+  }
+  if (promptTextClearTimeoutId) {
+    clearTimeout(promptTextClearTimeoutId)
+    promptTextClearTimeoutId = null
+  }
+  if (statusPromptTextClearTimeoutId) {
+    clearTimeout(statusPromptTextClearTimeoutId)
+    statusPromptTextClearTimeoutId = null
+  }
 }
 
 /**
@@ -243,6 +287,8 @@ function cancelPendingDetection(): void {
 
 // 摄像头上显示的提示文本
 const actionPromptText: Ref<string> = ref('')
+// 摄像头上显示的状态文本（用于其他提示）
+const statusPromptText: Ref<string> = ref('')
 // 视频容器的边框颜色状态
 const videoBorderColor: Ref<string> = ref(BORDER_COLOR_STATES.IDLE)
 
@@ -282,46 +328,19 @@ onMounted(async () => {
   const mergedConfig = mergeHumanConfig()
   
   // 检查浏览器环境和能力
-  const userAgent = navigator.userAgent
-  const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent)
-  const isWeChat = /micromessenger/i.test(userAgent)
-  const isAlipay = /Alipay/.test(userAgent)
-  const isQQ = /QQ/.test(userAgent)
-  const isWebView = !(/Chrome/.test(userAgent) && /Mobile/.test(userAgent))
+  const browserInfo = detectBrowserInfo()
   
   emitDebug('initialization', '开始初始化 Human.js 库', {
-    userAgent: userAgent.substring(0, 100),
-    browser: { isSafari, isWeChat, isAlipay, isQQ, isWebView },
+    userAgent: navigator.userAgent.substring(0, 100),
+    browser: browserInfo,
     modelBasePath: mergedConfig.modelBasePath,
     backend: mergedConfig.backend,
     selectedReason: `${isMobileDevice.value ? '移动设备' : '桌面设备'} - ${mergedConfig.backend} 后端`
   })
   
   // 检查 WebGL 支持
-  const canvas = document.createElement('canvas')
-  let webglContext = null
-  let webglInfo = { available: false, vendor: '', renderer: '', version: '' }
-  try {
-    webglContext = canvas.getContext('webgl') || canvas.getContext('webgl2')
-    if (webglContext) {
-      const debugInfo = webglContext.getExtension('WEBGL_debug_renderer_info')
-      if (debugInfo) {
-        webglInfo = {
-          available: true,
-          vendor: webglContext.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
-          renderer: webglContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
-          version: webglContext.getParameter(webglContext.VERSION)
-        }
-      } else {
-        webglInfo.available = true
-      }
-      emitDebug('initialization', 'WebGL 可用', webglInfo)
-    } else {
-      emitDebug('initialization', 'WebGL 不可用，将尝试 CPU 模式', { reason: 'getContext 返回 null' }, 'warn')
-    }
-  } catch (e) {
-    emitDebug('initialization', 'WebGL 检测失败', { error: (e as Error).message }, 'warn')
-  }
+  const webglInfo = getWebGLInfo()
+  emitDebug('initialization', webglInfo.available ? 'WebGL 可用' : 'WebGL 不可用', webglInfo)
   
   human = new Human(mergedConfig as any)
   try {
@@ -363,22 +382,23 @@ onMounted(async () => {
 // 组件卸载时清理资源
 onUnmounted(() => {
   stopDetection()
+  
+  // 清理所有事件监听器
   window.removeEventListener('orientationchange', handleOrientationChange)
-  // 移除可见性监听
   if (handleVisibilityChange) {
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     handleVisibilityChange = null
   }
+  
+  // 清理所有定时器
+  clearAllTimers()
+  
   // 清理缓存的临时 canvas
   captureCanvas = null
   captureCtx = null
+  
   // 清理待处理的检测帧
   cancelPendingDetection()
-  // 清理提示文本自动清空定时器
-  if (promptTextClearTimeoutId) {
-    clearTimeout(promptTextClearTimeoutId)
-    promptTextClearTimeoutId = null
-  }
 })
 
 // ===== 常量定义 =====
@@ -390,41 +410,20 @@ onUnmounted(() => {
  * 策略: 桌面优先 WebGL, 移动优先 WASM, 特殊浏览器强制 WASM
  */
 function detectOptimalBackend(): string {
-  const userAgent = navigator.userAgent.toLowerCase()
+  const browserInfo = detectBrowserInfo()
   
   // 特殊浏览器：优先使用 WASM（更稳定可靠）
-  const isSafari = /safari/.test(userAgent) && !/chrome/.test(userAgent)
-  const isWeChat = /micromessenger/i.test(userAgent)
-  const isAlipay = /alipay/.test(userAgent)
-  const isQQ = /qq/.test(userAgent)
-  const isWebView = /(wechat|alipay|qq)webview/i.test(userAgent)
-  
-  if (isSafari || isWeChat || isAlipay || isQQ || isWebView) {
+  if (browserInfo.isSafari || browserInfo.isWeChat || browserInfo.isAlipay || browserInfo.isQQ || browserInfo.isWebView) {
     return 'wasm'
   }
   
   // 移动设备：检测 WebGL 可用性
-  const isMobile = /android|iphone|ipad|ipod/.test(userAgent) || window.innerWidth < 768
-  
-  if (isMobile) {
-    // 移动设备先检测 WebGL，如果不可用则用 WASM
-    try {
-      const canvas = document.createElement('canvas')
-      const context = canvas.getContext('webgl') || canvas.getContext('webgl2')
-      return context ? 'webgl' : 'wasm'
-    } catch (e) {
-      return 'wasm'
-    }
+  if (browserInfo.isMobile) {
+    return isWebGLAvailable() ? 'webgl' : 'wasm'
   }
   
   // 桌面设备：优先 WebGL（性能更好）
-  try {
-    const canvas = document.createElement('canvas')
-    const context = canvas.getContext('webgl') || canvas.getContext('webgl2')
-    return context ? 'webgl' : 'wasm'
-  } catch (e) {
-    return 'wasm'
-  }
+  return isWebGLAvailable() ? 'webgl' : 'wasm'
 }
 
 /**
@@ -523,13 +522,10 @@ function resetDetectionState(): void {
   detectionState.baselineImage = null
   detectionState.currentAction = null
   actionPromptText.value = ''
+  statusPromptText.value = ''
   
   // 清空所有定时器
-  if (actionTimeoutId) clearTimeout(actionTimeoutId)
-  if (promptTextClearTimeoutId) {
-    clearTimeout(promptTextClearTimeoutId)
-    promptTextClearTimeoutId = null
-  }
+  clearAllTimers()
   
   // 清空结果图片
   resultImageSrc.value = ''
@@ -661,6 +657,9 @@ async function startDetection(): Promise<void> {
     emitDebug('video-setup', '启动检测失败', { error: (e as Error).message, stack: (e as Error).stack }, 'error')
     isDetecting.value = false
     emit(FACE_DETECTOR_EVENTS.ERROR, { code: ErrorCode.STREAM_ACQUISITION_FAILED, message: (e as Error).message })
+  } finally {
+    // 无论成功或失败，都确保资源状态一致
+    emitDebug('video-setup', '检测启动流程结束', { isDetecting: isDetecting.value })
   }
 }
 
@@ -671,14 +670,11 @@ function stopDetection(success: boolean = false): void {
   isDetecting.value = false
 
   actionPromptText.value = ''
+  statusPromptText.value = ''
   
   // 清理所有定时器和帧
   cancelPendingDetection()
-  if (actionTimeoutId) clearTimeout(actionTimeoutId)
-  if (promptTextClearTimeoutId) {
-    clearTimeout(promptTextClearTimeoutId)
-    promptTextClearTimeoutId = null
-  }
+  clearAllTimers()
   
   if (stream) stream.getTracks().forEach(t => t.stop())
 
@@ -1010,12 +1006,26 @@ async function detect(): Promise<void> {
 }
 
 /**
+ * 检查单个质量指标
+ */
+function checkQualityMetric(value: any, threshold: number, metricName: string): { passed: boolean, reason?: string } {
+  if (value === undefined || value === null) {
+    return { passed: false, reason: `${metricName} 属性缺失` }
+  }
+  if (value < threshold) {
+    return { passed: false, reason: `${metricName}: ${value.toFixed(2)} < ${threshold}` }
+  }
+  return { passed: true }
+}
+
+/**
  * 检查图像质量是否符合要求
  * @param {Object} face - 人脸检测结果，包含 boxScore、faceScore、score 等字段
  * @returns {Object} 包含质量评估结果的对象 { passed: boolean, score: number, reasons: string[] }
  */
 function checkImageQuality(face: any): { passed: boolean, score: number, reasons: string[] } {
   const reasons: string[] = []
+  const config = CONFIG.IMAGE_QUALITY
 
   emitDebug('quality-check', '开始图像质量检测', { 
     boxScore: face.boxScore,
@@ -1023,50 +1033,30 @@ function checkImageQuality(face: any): { passed: boolean, score: number, reasons
     overallScore: face.score
   })
   
-  // 获取各个质量指标 - 区分 undefined 和 0
-  // 如果属性完全不存在，认为无法评估，视为失败
-  const boxScore = face.boxScore !== undefined ? face.boxScore : null
-  const faceScore = face.faceScore !== undefined ? face.faceScore : null
-  const overallScore = face.score !== undefined ? face.score : null
+  // 使用函数式方法检查各个指标
+  const metrics = [
+    { value: face.boxScore, threshold: config.MIN_BOX_SCORE, name: '人脸检测框得分' },
+    { value: face.faceScore, threshold: config.MIN_FACE_SCORE, name: '人脸网格得分' },
+    { value: face.score, threshold: config.MIN_OVERALL_SCORE, name: '综合得分' }
+  ]
   
-  // 检查必要属性是否存在
-  if (boxScore === null) {
-    reasons.push(`人脸检测框得分缺失 (boxScore 属性不存在)`)
-  } else if (boxScore < CONFIG.IMAGE_QUALITY.MIN_BOX_SCORE) {
-    reasons.push(`人脸检测不清晰 (boxScore: ${boxScore.toFixed(2)} < ${CONFIG.IMAGE_QUALITY.MIN_BOX_SCORE})`)
-  }
-  
-  if (faceScore === null) {
-    reasons.push(`人脸网格得分缺失 (faceScore 属性不存在) - 可能是 Human.js 版本不支持或检测失败`)
-  } else if (faceScore < CONFIG.IMAGE_QUALITY.MIN_FACE_SCORE) {
-    reasons.push(`图像模糊或质量差 (faceScore: ${faceScore.toFixed(2)} < ${CONFIG.IMAGE_QUALITY.MIN_FACE_SCORE})`)
-  }
-  
-  if (overallScore === null) {
-    reasons.push(`综合得分缺失 (score 属性不存在)`)
-  } else if (overallScore < CONFIG.IMAGE_QUALITY.MIN_OVERALL_SCORE) {
-    reasons.push(`整体图像质量不足 (score: ${overallScore.toFixed(2)} < ${CONFIG.IMAGE_QUALITY.MIN_OVERALL_SCORE})`)
-  }
-  
+  const scores = metrics
+    .map(({ value, threshold, name }) => {
+      const result = checkQualityMetric(value, threshold, name)
+      if (!result.passed && result.reason) {
+        reasons.push(result.reason)
+      }
+      return value ?? 0
+    })
+
   const passed = reasons.length === 0
-  const score = Math.max(
-    boxScore !== null ? boxScore : 0,
-    faceScore !== null ? faceScore : 0,
-    overallScore !== null ? overallScore : 0
-  )
+  const score = Math.max(...scores)
   
   if (!passed) {
-    // 发送 status-prompt 事件
-    emitStatusPrompt(PromptCode.POOR_IMAGE_QUALITY, { 
-      score: score
-    })
-    
+    emitStatusPrompt(PromptCode.POOR_IMAGE_QUALITY, { score: score })
     emitDebug('quality-check', '图像质量检测未通过', { 
       passed, 
       score: score.toFixed(2),
-      boxScore: boxScore !== null ? boxScore.toFixed(2) : 'N/A', 
-      faceScore: faceScore !== null ? faceScore.toFixed(2) : 'N/A', 
-      overallScore: overallScore !== null ? overallScore.toFixed(2) : 'N/A',
       reasons
     }, 'warn')
   }
@@ -1659,20 +1649,39 @@ video {
 /* 活体检测提示文本样式 */
 .action-prompt {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 35px);
   left: 50%;
   transform: translate(-50%, -50%);
   background-color: rgba(0, 0, 0, 0.7);
   color: #fff;
-  padding: 20px 40px;
-  border-radius: 12px;
-  font-size: 28px;
-  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
   white-space: nowrap;
   z-index: 10;
   animation: fadeIn 0.3s ease-in;
   text-align: center;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+}
+
+/* 状态提示文本样式 */
+.status-prompt {
+  position: absolute;
+  top: calc(50% + 35px);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  z-index: 10;
+  animation: fadeIn 0.3s ease-in;
+  text-align: center;
+  letter-spacing: 0.5px;
 }
 
 @keyframes fadeIn {
