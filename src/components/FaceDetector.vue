@@ -375,6 +375,8 @@ function mergeHumanConfig(): Record<string, any> {
     backend: detectOptimalBackend(),
     // 模型文件本地路径
     modelBasePath: '/models',
+    // WASM 文件本地路径
+    wasmPath: '/wasm',
     // 人脸检测配置
     face: {
       enabled: true,

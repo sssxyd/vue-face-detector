@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "publish": "node publish.js",
     "publish:build": "npm run build && npm run publish",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "copy:models": "node copy-models.js",
+    "download:wasm": "node download-wasm.js"
   },
   "dependencies": {
     "@vladmandic/human": "^3.3.0",

@@ -707,6 +707,32 @@ function detectOptimalBackend(): string {
 </template>
 ```
 
+### WASM 后端配置
+
+当使用 WASM 后端时，需要配置 WASM 文件的位置。Human.js 提供两个关键参数：
+
+| 参数 | 用途 | 示例 |
+|-----|------|------|
+| **`modelBasePath`** | AI 模型文件位置 | `/models` 或 不配置，自动使用CDN URL |
+| **`wasmPath`** | WASM 运行时文件位置 | `/wasm/` 或 不配置，自动使用CDN URL |
+
+**配置示例**:
+
+```vue
+<template>
+  <FaceDetector
+    :human-config="{
+      backend: 'wasm',
+      modelBasePath: '/models',  // 本地模型文件
+      wasmPath: '/wasm/'         // 本地 WASM 文件 (或 CDN URL)
+    }"
+  />
+</template>
+```
+```
+
+详细信息请参考 [WASM 配置指南](./WASM_PATH_CONFIGURATION.md)。
+
 ### 性能参考
 
 | 后端 | 桌面单帧 | 移动单帧 | 优势 | 劣势 |
