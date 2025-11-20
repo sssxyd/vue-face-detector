@@ -1015,7 +1015,11 @@ async function detect(): Promise<void> {
 function checkImageQuality(face: any): { passed: boolean, score: number, reasons: string[] } {
   const reasons: string[] = []
 
-  emitDebug('quality-check', '开始图像质量检测', { faceKeys: Object.keys(face) })
+  emitDebug('quality-check', '开始图像质量检测', { 
+    boxScore: face.boxScore,
+    faceScore: face.faceScore,
+    overallScore: face.score
+  })
   
   // 获取各个质量指标 - 区分 undefined 和 0
   // 如果属性完全不存在，认为无法评估，视为失败
