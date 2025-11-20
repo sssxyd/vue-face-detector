@@ -669,6 +669,8 @@ async function startDetection(): Promise<void> {
  */
 function stopDetection(success: boolean = false): void {
   isDetecting.value = false
+
+  actionPromptText.value = ''
   
   // 清理所有定时器和帧
   cancelPendingDetection()
