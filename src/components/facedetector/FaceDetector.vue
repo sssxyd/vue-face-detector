@@ -27,12 +27,10 @@ import { CONFIG } from './config'
 import { DetectionMode, LivenessAction, ErrorCode, PromptCode} from './enums'
 import { FACE_DETECTOR_EVENTS, BORDER_COLOR_STATES, PROMPT_CODE_DESCRIPTIONS, ACTION_DESCRIPTIONS } from './constants'
 import { detectBrowserInfo, isWebGLAvailable, getWebGLInfo } from './utils'
-// 导入人脸正对度检测模块 (Phase 1)
+// 导入人脸正对度检测模块
 import { checkFaceFrontal as checkFaceFrontalModule } from './face-frontal-detection'
-// 导入图像质量检测模块 (Phase 1)
-import { checkImageQualityOnly as checkImageQualityOnlyModule, getQualityLevel } from './image-quality-checker'
-// 导入人脸完整性检测模块
-import { checkFaceCompleteness as checkFaceCompletenessModule } from './face-completeness'
+// 导入图像质量检测模块
+import { checkImageQuality } from './image-quality-checker'
 
 // 定义组件 props
 const props = withDefaults(defineProps<FaceDetectorProps>(), {
@@ -1037,8 +1035,7 @@ function checkFaceImageQuality(face: any, imageWidth?: number, imageHeight?: num
   
   const reasons: string[] = []
   
-  // ===== 第一步：检查图像质量 =====
-  const qualityOnlyResult = checkImageQualityOnlyModule(face)
+  const qualityOnlyResult = checkImageQuality(face, imgWidth, imgHeight)
   
   if (!qualityOnlyResult.passed) {
     // 图像质量不达标，直接返回
@@ -1046,55 +1043,17 @@ function checkFaceImageQuality(face: any, imageWidth?: number, imageHeight?: num
     emitStatusPrompt(PromptCode.POOR_IMAGE_QUALITY, { quality: qualityOnlyResult.score.toFixed(2) })
     emitDebug('quality', '图像质量检测未通过', {
       score: qualityOnlyResult.score.toFixed(2),
-      level: getQualityLevel(qualityOnlyResult.score),
       reasons: qualityOnlyResult.reasons
     }, 'warn')
     return { passed: false, score: qualityOnlyResult.score, reasons }
   }
-  
-  // ===== 第二步：检查人脸完整性 =====
-  let completenessResult = {
-    isComplete: true,
-    completenessScore: 1,
-    description: '人脸完整性检测通过'
-  }
-  
-  if(CONFIG.FACE_COMPLETENESS.COMPLETENESS_THRESHOLD > 0) {
-    completenessResult = {
-        isComplete: false,
-        completenessScore: 0.01,
-        description: '人脸完整性检测未通过'
-    }
-    try {
-      completenessResult = checkFaceCompletenessModule(face, imgWidth, imgHeight)
-    } catch (error) {
-      emitDebug('completeness', '人脸完整性检测出错', { error: (error as Error).message }, 'warn')
-    }    
-  }
-  
-  if (!completenessResult.isComplete) {
-    // 人脸完整性不达标，直接返回
-    reasons.push(completenessResult.description)
-    emitStatusPrompt(PromptCode.POOR_IMAGE_QUALITY, { quality: completenessResult.completenessScore.toFixed(2) })
-    emitDebug('quality', '人脸完整性检测未通过', {
-      completenessScore: completenessResult.completenessScore.toFixed(2),
-      description: completenessResult.description
-    }, 'warn')
-    return { passed: false, score: completenessResult.completenessScore, reasons }
-  }
-  
-  // ===== 两步都通过 =====
-  const overallScore = (qualityOnlyResult.score + completenessResult.completenessScore) / 2
-  
-  emitStatusPrompt(PromptCode.GOOD_IMAGE_QUALITY, { quality: overallScore.toFixed(2) })
+
+  emitStatusPrompt(PromptCode.GOOD_IMAGE_QUALITY, { quality: qualityOnlyResult.score.toFixed(2) })
   emitDebug('quality', '图像质量与完整性检测通过', {
-    overallScore: overallScore.toFixed(2),
     imageQualityScore: qualityOnlyResult.score.toFixed(2),
-    completenessScore: completenessResult.completenessScore.toFixed(2),
-    level: getQualityLevel(overallScore)
   })
   
-  return { passed: true, score: overallScore, reasons }
+  return { passed: true, score: qualityOnlyResult.score, reasons }
 }
 
 /**

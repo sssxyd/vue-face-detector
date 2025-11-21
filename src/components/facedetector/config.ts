@@ -46,41 +46,14 @@ export const CONFIG = Object.freeze({
   },
   // 图像质量相关配置
   IMAGE_QUALITY: {
+    // 是否要求人脸完全在图片内（不超出边界）
+    REQUIRE_FULL_FACE_IN_BOUNDS: true,
     // 最小人脸检测框分数（0-1）- 检测框置信度低于此值表示检测不清晰
     MIN_BOX_SCORE: 0.8,
     // 最小人脸网格分数（0-1）- 网格置信度低于此值表示图像模糊或质量差
     MIN_FACE_SCORE: 0.8,
     // 最小综合分数（0-1）- 综合评分低于此值表示图像质量不足
     MIN_OVERALL_SCORE: 0.8
-  },
-  // 人脸完整性检测相关配置
-  FACE_COMPLETENESS: {
-    // 最小眼睛置信度 (0-1) - 眼睛区域关键点的平均置信度
-    MIN_EYE_CONFIDENCE: 0.3,
-    // 最小鼻子置信度 (0-1) - 鼻子区域关键点的平均置信度
-    MIN_NOSE_CONFIDENCE: 0.3,
-    // 最小嘴巴置信度 (0-1) - 嘴巴区域关键点的平均置信度
-    MIN_MOUTH_CONFIDENCE: 0.3,
-    // 最小耳朵置信度 (0-1) - 耳朵区域关键点的平均置信度
-    MIN_EAR_CONFIDENCE: 0.2,
-    // 人脸是否需要完全在图片内（不超出边界）
-    REQUIRE_FULL_FACE_IN_BOUNDS: true,
-    // 是否严格模式（要求检测到所有五官）
-    STRICT_MODE: false,
-    // 完整度评分阈值 (0-1) - 评分达到此值认为人脸是完整的, 0表示禁用
-    COMPLETENESS_THRESHOLD: 0,
-    // 眼睛缺失的扣分值
-    PENALTY_MISSING_EYES: 0.25,
-    // 鼻子缺失的扣分值
-    PENALTY_MISSING_NOSE: 0.15,
-    // 嘴巴缺失的扣分值
-    PENALTY_MISSING_MOUTH: 0.2,
-    // 耳朵缺失的扣分值
-    PENALTY_MISSING_EARS: 0.15,
-    // 超出边界的扣分值
-    PENALTY_OUT_OF_BOUNDS: 0.2,
-    // 关键点置信度全为零的扣分值
-    PENALTY_NO_LANDMARKS: 1.0
   },
   // 检测超时相关配置
   TIMEOUT: {

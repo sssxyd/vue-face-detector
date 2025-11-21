@@ -71,8 +71,10 @@ export interface ImageQualityResult {
  *   console.log('图像质量满足要求')
  * }
  */
-export function checkImageQualityOnly(
-  face: any
+export function checkImageQuality(
+  face: any,
+  imageWidth: number,
+  imageHeight: number  
 ): {
   passed: boolean
   score: number
@@ -85,6 +87,19 @@ export function checkImageQualityOnly(
   // 初始化结果
   const reasons: string[] = []
   const metrics: Record<string, QualityMetricResult> = {}
+
+  // 检查人脸框是否在图片范围内
+  let faceInBounds = 1
+  if (CONFIG.IMAGE_QUALITY.REQUIRE_FULL_FACE_IN_BOUNDS) {
+    const faceBox = face.box || face.boxRaw
+    if (faceBox && faceBox.length >= 4) {
+      const [x, y, width, height] = faceBox
+      if (x < 0 || y < 0 || x + width > imageWidth || y + height > imageHeight) {
+        faceInBounds = 0
+        reasons.push('人脸超出边界')
+      }
+    }  
+ }
   
   // ===== 检查检测框质量 =====
   const boxScoreResult = checkBoxScore(face)
@@ -100,7 +115,7 @@ export function checkImageQualityOnly(
     reasons.push(faceScoreResult.description)
   }
   
-  const imageQualityScore = Math.min(boxScoreResult.value, faceScoreResult.value)
+  const imageQualityScore = Math.min(boxScoreResult.value, faceScoreResult.value, faceInBounds)
   
   const passed = reasons.length === 0 && imageQualityScore >= CONFIG.IMAGE_QUALITY.MIN_OVERALL_SCORE
   
@@ -149,24 +164,4 @@ function checkFaceScore(face: any): QualityMetricResult {
     passed,
     description: `人脸网格置信度 ${(faceScore * 100).toFixed(0)}% ${passed ? '✓' : '✗ 需 ≥' + (minFaceScore * 100).toFixed(0) + '%'}`
   }
-}
-
-/**
- * 获取质量等级描述
- * 
- * 将 0-1 的评分转换为用户友好的等级
- * 
- * @param {number} score - 质量评分
- * @returns {string} 等级描述
- * 
- * @example
- * console.log(getQualityLevel(0.95))  // "优秀"
- * console.log(getQualityLevel(0.65))  // "一般"
- */
-export function getQualityLevel(score: number): string {
-  if (score >= 0.9) return '优秀'
-  if (score >= 0.75) return '良好'
-  if (score >= 0.6) return '一般'
-  if (score >= 0.4) return '较差'
-  return '不可用'
 }
